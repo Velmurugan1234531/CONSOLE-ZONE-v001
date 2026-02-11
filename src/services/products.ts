@@ -14,7 +14,7 @@ export const DEMO_PRODUCTS: Product[] = [
         category: 'PS5',
         stock: 5,
         images: ["/images/products/ps5.png"],
-        status: 'active',
+        status: 'available',
         created_at: new Date().toISOString()
     },
     {
@@ -26,7 +26,7 @@ export const DEMO_PRODUCTS: Product[] = [
         category: 'Xbox',
         stock: 3,
         images: ["/images/products/xbox.png"],
-        status: 'active',
+        status: 'available',
         created_at: new Date().toISOString()
     },
     {
@@ -38,7 +38,7 @@ export const DEMO_PRODUCTS: Product[] = [
         category: 'Accessory',
         stock: 8,
         images: ["/images/products/switch.png"],
-        status: 'active',
+        status: 'available',
         created_at: new Date().toISOString()
     }
 ];
