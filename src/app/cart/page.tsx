@@ -53,6 +53,22 @@ export default function CartPage() {
         try {
             const orderData = await handleCheckout(totalPrice);
 
+            // HANDLE DEMO MODE
+            if (orderData.id.startsWith("demo_")) {
+                console.log("🎮 DEMO MODE: Simulating successful payment");
+                // Simulate delay for realism
+                setTimeout(() => {
+                    const mockResponse = {
+                        razorpay_payment_id: "pay_demo_" + Date.now(),
+                        razorpay_order_id: orderData.id,
+                        razorpay_signature: "demo_signature"
+                    };
+                    console.log("Payment Success (DEMO):", mockResponse);
+                    alert("DEMO MODE: Payment Successful! 🎮\nOrder ID: " + orderData.id);
+                }, 1000);
+                return;
+            }
+
             const options = {
                 key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
                 amount: orderData.amount,
@@ -223,7 +239,7 @@ export default function CartPage() {
                                         </>
                                     ) : (
                                         <>
-                                            Procced to Checkout
+                                            Proceed to Checkout
                                             <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />
                                         </>
                                     )}
