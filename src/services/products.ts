@@ -180,7 +180,7 @@ export const getProducts = async (type?: ProductType, category?: string, include
     // MAP FOR UI COMPATIBILITY (image singular)
     return products.map(p => ({
         ...p,
-        image: (p as any).image || p.images?.[0] || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600'
+        image: p.image || p.images?.[0] || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600'
     }));
 };
 
@@ -196,7 +196,7 @@ export const getProductById = async (id: string) => {
         if (error) throw error;
         return {
             ...data,
-            image: (data as any).image || data.images?.[0]
+            image: data.image || data.images?.[0]
         } as Product;
     } catch (error) {
         // Fallback for individual product view
@@ -212,7 +212,7 @@ export const getProductById = async (id: string) => {
             if (found) {
                 return {
                     ...found,
-                    image: (found as any).image || found.images?.[0]
+                    image: found.image || found.images?.[0]
                 };
             }
             return null;
@@ -231,9 +231,10 @@ export const updateProductStock = async (id: string, newStock: number) => {
     if (error) throw error;
 };
 
-export const createProduct = async (productData: any) => {
+export const createProduct = async (productData: Partial<Product>) => {
     const images = productData.images || (productData.image ? [productData.image] : ['https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600']);
-    const formatted = {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const formatted: any = {
         ...productData,
         id: productData.id || crypto.randomUUID(),
         images,
@@ -249,9 +250,10 @@ export const createProduct = async (productData: any) => {
             .single();
 
         if (error) throw error;
+        const p = data as Product;
         return {
-            ...data,
-            image: (data as any).image || data.images?.[0]
+            ...p,
+            image: p.image || p.images?.[0]
         };
     } catch (error) {
         console.warn("Supabase create failed, using localStorage:", error);
@@ -269,7 +271,7 @@ export const createProduct = async (productData: any) => {
     }
 };
 
-export const createProductsBatch = async (productsData: any[]) => {
+export const createProductsBatch = async (productsData: Partial<Product>[]) => {
     const formattedProducts = productsData.map(({ image, ...p }) => ({
         ...p,
         id: p.id || crypto.randomUUID(),
@@ -285,14 +287,15 @@ export const createProductsBatch = async (productsData: any[]) => {
             .select();
 
         if (error) throw error;
-        return data.map((p: any) => ({ ...p, image: (p as any).image || p.images?.[0] }));
+        return (data as Product[]).map((p) => ({ ...p, image: p.image || p.images?.[0] }));
     } catch (error) {
         console.warn("Supabase batch insert failed, saving to localStorage:", error);
         if (typeof window !== 'undefined') {
             const existing = JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY) || '[]');
             const updated = [...existing, ...formattedProducts];
             localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated));
-            return formattedProducts.map(p => ({ ...p, image: (p as any).image || p.images?.[0] }));
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            return formattedProducts.map((p: any) => ({ ...p, image: p.image || p.images?.[0] }));
         }
         throw error;
     }
@@ -309,7 +312,8 @@ export const updateProduct = async (id: string, productData: Partial<Product>) =
             .single();
 
         if (error) throw error;
-        return { ...data, image: (data as any).image || data.images?.[0] };
+        const p = data as Product;
+        return { ...p, image: p.image || p.images?.[0] };
     } catch (error) {
         if (typeof window !== 'undefined') {
             const stored = localStorage.getItem(PRODUCTS_STORAGE_KEY);
@@ -321,7 +325,7 @@ export const updateProduct = async (id: string, productData: Partial<Product>) =
 
             localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated));
             const found = updated.find((p: Product) => p.id === id);
-            return found ? { ...found, image: (found as any).image || found.images?.[0] } : null;
+            return found ? { ...found, image: found.image || found.images?.[0] } : null;
         }
         throw error;
     }

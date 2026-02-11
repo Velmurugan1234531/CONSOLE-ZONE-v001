@@ -28,7 +28,7 @@ import {
     Bell
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getAdminStats, getRevenueAnalytics, RevenueDataPoint, getDashboardActivity } from "@/services/admin";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -82,30 +82,29 @@ const ADMIN_MODULES = [
 ];
 
 export default function AdminDashboard() {
-    const [stats, setStats] = useState<any>(null);
-    const [revenueData, setRevenueData] = useState<RevenueDataPoint[]>([]);
-    const [activity, setActivity] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: stats } = useQuery({
+        queryKey: ['adminStats'],
+        queryFn: getAdminStats,
+        initialData: null
+    });
 
-    useEffect(() => {
-        async function loadDashboard() {
-            try {
-                const [statsRes, revenueRes, activityRes] = await Promise.all([
-                    getAdminStats(),
-                    getRevenueAnalytics(),
-                    getDashboardActivity()
-                ]);
-                setStats(statsRes);
-                setRevenueData(revenueRes.data);
-                setActivity(activityRes);
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadDashboard();
-    }, []);
+    const { data: revenueData = [] } = useQuery({
+        queryKey: ['revenueAnalytics'],
+        queryFn: () => getRevenueAnalytics(),
+        select: (data) => data.data
+    });
+
+    const { data: activity = [] } = useQuery({
+        queryKey: ['dashboardActivity'],
+        queryFn: getDashboardActivity
+    });
+
+    // Loading state is now less critical since we have defaults/initialData, 
+    // but for the first load we might want a spinner if crucial data is missing.
+    // However, the original code wanted a full blocking load. 
+    // With React Query, it's better to show UI skeleton or just let it hydrate.
+    // We'll keep a simple check for the critical 'stats' to avoid layout shifts.
+    const loading = !stats;
 
     if (loading) {
         return (

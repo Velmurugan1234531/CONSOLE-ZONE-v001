@@ -23,6 +23,8 @@ function LoadingFallback() {
   return <div className="fixed inset-0 bg-[#050505] z-[9999]" />;
 }
 
+import QueryProvider from "@/providers/QueryProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,21 +33,23 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
-        <VisualsProvider>
-          <CartProvider>
-            <AppearanceProvider>
-              <Navbar />
-              <Suspense fallback={<LoadingFallback />}>
-                <LayoutAnimator>
-                  {children}
-                </LayoutAnimator>
-              </Suspense>
-              <Footer />
-              <CustomerSupportAgent />
-              <CartPanel />
-            </AppearanceProvider>
-          </CartProvider>
-        </VisualsProvider>
+        <QueryProvider>
+          <VisualsProvider>
+            <CartProvider>
+              <AppearanceProvider>
+                <Navbar />
+                <Suspense fallback={<LoadingFallback />}>
+                  <LayoutAnimator>
+                    {children}
+                  </LayoutAnimator>
+                </Suspense>
+                <Footer />
+                <CustomerSupportAgent />
+                <CartPanel />
+              </AppearanceProvider>
+            </CartProvider>
+          </VisualsProvider>
+        </QueryProvider>
       </body>
     </html>
   );

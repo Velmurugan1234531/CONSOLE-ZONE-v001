@@ -27,7 +27,7 @@ export default function InvoicesPage() {
             const data = await getAllTransactions();
             setTransactions(data);
         } catch (err) {
-            console.error(err);
+            console.error("InvoicesPage loadData failed:", err);
         } finally {
             setLoading(false);
         }

@@ -21,11 +21,15 @@ export default function MaintenancePage() {
     }, []);
 
     const loadData = async () => {
-        const statsData = await getMaintenanceDashboardStats();
-        setStats(statsData);
+        try {
+            const statsData = await getMaintenanceDashboardStats();
+            setStats(statsData);
 
-        const assetsData = await getCriticalAssets();
-        setCriticalAssets(assetsData || []);
+            const assetsData = await getCriticalAssets();
+            setCriticalAssets(assetsData || []);
+        } catch (error) {
+            console.error("MaintenancePage loadData failed:", error);
+        }
     };
 
     return (

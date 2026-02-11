@@ -56,10 +56,19 @@ export default function RentalsPage() {
     const fetchRentals = async () => {
         setLoading(true);
         try {
-            const [rentalsData, devicesData] = await Promise.all([
+            // We use allSettled to allow one to fail without crashing the other
+            const [rentalsResult, devicesResult] = await Promise.allSettled([
                 getAllRentals(),
                 getAllDevices()
             ]);
+
+            const rentalsData = rentalsResult.status === 'fulfilled' ? rentalsResult.value : [];
+            const devicesData = devicesResult.status === 'fulfilled' ? devicesResult.value : [];
+
+            if (rentalsResult.status === 'rejected') {
+                console.warn("Rentals fetch failed (using empty fallback):", rentalsResult.reason);
+            }
+
             setRentals(rentalsData || []);
             setDevices(devicesData || []);
 
@@ -69,7 +78,7 @@ export default function RentalsPage() {
                 setFleetHealth(Math.round(avg));
             }
         } catch (error) {
-            console.error(error);
+            console.error("Critical error in fetchRentals:", error);
         } finally {
             setLoading(false);
         }

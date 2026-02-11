@@ -99,17 +99,22 @@ export const getCatalogSettings = async (): Promise<CatalogSettings[]> => {
     }
 
     const supabase = createClient();
-    const { data, error } = await supabase
-        .from('catalog_settings')
-        .select('*')
-        .order('display_order', { ascending: true });
+    try {
+        const { data, error } = await supabase
+            .from('catalog_settings')
+            .select('*')
+            .order('display_order', { ascending: true });
 
-    if (error) {
-        console.error("Error fetching catalog settings:", error);
-        throw error;
+        if (error) {
+            console.warn("Error fetching catalog settings (using demo fallback):", error.message);
+            return loadDemoSettings();
+        }
+
+        return data || [];
+    } catch (e) {
+        console.warn("Catalog fetch crash (using demo fallback):", e);
+        return loadDemoSettings();
     }
-
-    return data || [];
 };
 
 export const getCatalogSettingsByCategory = async (category: string): Promise<CatalogSettings | null> => {
@@ -119,18 +124,25 @@ export const getCatalogSettingsByCategory = async (category: string): Promise<Ca
     }
 
     const supabase = createClient();
-    const { data, error } = await supabase
-        .from('catalog_settings')
-        .select('*')
-        .eq('device_category', category)
-        .single();
+    try {
+        const { data, error } = await supabase
+            .from('catalog_settings')
+            .select('*')
+            .eq('device_category', category)
+            .single();
 
-    if (error) {
-        console.error("Error fetching catalog setting:", error);
-        return null;
+        if (error) {
+            console.warn("Error fetching catalog setting (using fallback):", error.message);
+            const settings = loadDemoSettings();
+            return settings.find(c => c.device_category === category) || null;
+        }
+
+        return data;
+    } catch (e) {
+        console.warn("Catalog category fetch crash:", e);
+        const settings = loadDemoSettings();
+        return settings.find(c => c.device_category === category) || null;
     }
-
-    return data;
 };
 
 export const updateCatalogSettings = async (
@@ -235,6 +247,54 @@ export const deleteCatalogSettings = async (category: string): Promise<boolean> 
     }
 
     return true;
+};
+
+export const renameCategory = async (
+    oldCategory: string,
+    newCategory: string
+): Promise<boolean> => {
+    if (!isSupabaseConfigured()) {
+        console.warn("Supabase not configured. Renaming local demo category.");
+        const currentSettings = loadDemoSettings();
+        const index = currentSettings.findIndex(c => c.device_category === oldCategory);
+
+        if (index !== -1) {
+            const updatedSettings = [...currentSettings];
+            updatedSettings[index] = { ...updatedSettings[index], device_category: newCategory };
+            persistDemoSettings(updatedSettings);
+
+            // Update memory sync
+            const memIndex = DEMO_CATALOG_SETTINGS.findIndex(c => c.device_category === oldCategory);
+            if (memIndex !== -1) DEMO_CATALOG_SETTINGS[memIndex].device_category = newCategory;
+
+            return true;
+        }
+        return false;
+    }
+
+    const supabase = createClient();
+    try {
+        // 1. Update catalog_settings
+        const { error: catError } = await supabase
+            .from('catalog_settings')
+            .update({ device_category: newCategory })
+            .eq('device_category', oldCategory);
+
+        if (catError) throw catError;
+
+        // 2. Update hardware units (consoles table)
+        const { error: deviceError } = await supabase
+            .from('consoles')
+            .update({ category: newCategory })
+            .eq('category', oldCategory);
+
+        if (deviceError) throw deviceError;
+
+        return true;
+    } catch (e) {
+        console.error("Renaming flow failure:", e);
+        throw e;
+    }
 };
 
 export const getEnabledDevices = async (): Promise<CatalogSettings[]> => {

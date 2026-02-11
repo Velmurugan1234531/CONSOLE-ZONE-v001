@@ -4,8 +4,10 @@ import { useState, useEffect, FormEvent } from "react";
 import { Monitor, Search, Plus, Filter, HardDrive, User, Calendar, AlertCircle, CheckCircle2, MoreVertical, Settings, ArrowUpRight, X, Activity, ClipboardList, Gamepad2, DollarSign, Tag, Layers, ToggleLeft, ToggleRight, Star, Percent, Save, Trash2, Zap, Shield, TrendingUp, Edit2, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DeviceSchema } from "@/lib/schemas";
 import { getAllDevices, updateDeviceStatus, getDeviceHistory, createDevice, updateDevice, deleteDevice, duplicateDevice, DeviceHistoryLog } from "@/services/admin";
-import { getCatalogSettings, updateCatalogSettings, CatalogSettings } from "@/services/catalog";
+import { getCatalogSettings, updateCatalogSettings, CatalogSettings, renameCategory } from "@/services/catalog";
 import { getAllOffers, updateOffer, createOffer, PromotionalOffer } from "@/services/offers";
 import { Rental, Device } from "@/types";
 import { QRGenerator } from "./QRGenerator";
@@ -14,13 +16,25 @@ import { QrCode, HardDrive as ConnectorIcon } from "lucide-react";
 import { format } from "date-fns";
 import { FleetMergedView } from "./FleetMergedView";
 import { LayoutGrid, List, Layers as LayersIcon } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 type EditTab = 'unit' | 'category' | 'pricing' | 'offers' | 'history';
 type ViewMode = 'matrix' | 'list' | 'merged';
 
 export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
-    const [devices, setDevices] = useState<Device[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const searchParams = useSearchParams();
+
+    const { data: devices = [], isLoading: loading } = useQuery<Device[]>({
+        queryKey: ['adminDevices'],
+        queryFn: getAllDevices
+    });
+
+    const { data: categories = [] } = useQuery<CatalogSettings[]>({
+        queryKey: ['adminCategories'],
+        queryFn: getCatalogSettings
+    });
+
     const [searchTerm, setSearchTerm] = useState("");
     const [filterStatus, setFilterStatus] = useState<string>("all");
 
@@ -57,7 +71,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
     }>({
         name: "",
         serial_number: "",
-        category: "",
+        category: categories[0]?.device_category || "",
         health: 100,
         notes: "",
         cost: 0,
@@ -78,7 +92,18 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         { name: 'Quest 3', model: 'Meta Quest 3', category: 'VR', connectors: 'USB-C', storage: 128, firmware: '65.0.0', controllers: 2, icon: <Activity size={14} /> },
     ];
 
-    const applyPreset = (preset: any) => {
+    interface DevicePreset {
+        name: string;
+        model: string;
+        category: string;
+        connectors: string;
+        storage: number;
+        firmware: string;
+        controllers: number;
+        icon: React.ReactNode;
+    }
+
+    const applyPreset = (preset: DevicePreset) => {
         setNewDevice(prev => ({
             ...prev,
             name: preset.model,
@@ -89,6 +114,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
             firmware_version: preset.firmware
         }));
     };
+
     const [newOffer, setNewOffer] = useState<{
         code: string;
         discount_type: 'percentage' | 'fixed';
@@ -100,43 +126,73 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         discount_value: 0,
         min_rental_days: 1
     });
-    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const [qrDevice, setQrDevice] = useState<Device | null>(null);
     const [isShowingQR, setIsShowingQR] = useState(false);
     const [viewMode, setViewMode] = useState<ViewMode>('matrix');
-    const [categories, setCategories] = useState<CatalogSettings[]>([]);
     const [activeCategory, setActiveCategory] = useState<string>('all');
 
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ id, status }: { id: string, status: Device['status'] }) => updateDeviceStatus(id, status),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDevices'] })
+    });
 
-    const loadCategories = async () => {
-        try {
-            const data = await getCatalogSettings();
-            setCategories(data);
-            if (data.length > 0 && !newDevice.category) {
-                setNewDevice(prev => ({ ...prev, category: data[0].device_category }));
-            }
-        } catch (error) {
-            console.error("Failed to load categories:", error);
+    const deleteMutation = useMutation({
+        mutationFn: deleteDevice,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminDevices'] });
+            setIsEditing(false);
+            setEditingDevice(null);
         }
-    };
+    });
 
-    const loadDevices = async () => {
-        try {
-            setLoading(true);
-            const data = await getAllDevices();
-            setDevices(data);
-        } catch (error) {
-            console.error("Failed to load devices:", error);
-        } finally {
-            setLoading(false);
+    const duplicateMutation = useMutation({
+        mutationFn: duplicateDevice,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminDevices'] })
+    });
+
+    const createMutation = useMutation({
+        mutationFn: createDevice,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminDevices'] });
+            setIsAdding(false);
+            setNewDevice({
+                name: "",
+                serial_number: "",
+                category: categories[0]?.device_category || "",
+                health: 100,
+                notes: "",
+                cost: 0,
+                supplier: "",
+                purchaseDate: "",
+                warrantyExpiry: "",
+                connectors: "",
+                asset_records: "",
+                controllers: 1,
+                storage_gb: 825,
+                firmware_version: "1.0.0"
+            });
         }
-    };
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }: { id: string, data: Partial<Device> }) => updateDevice(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminDevices'] });
+            setIsEditing(false);
+            setEditingDevice(null);
+        }
+    });
+
+    const isSubmitting = updateStatusMutation.isPending ||
+        deleteMutation.isPending ||
+        duplicateMutation.isPending ||
+        createMutation.isPending ||
+        updateMutation.isPending;
 
     const generateNextSerial = () => {
         if (!devices || devices.length === 0) return 'SN-000001';
-
-        // Extract numbers from SN-XXXXXX format
-        const maxSerial = devices.reduce((max, device) => {
+        const maxSerial = devices.reduce((max: number, device: Device) => {
             const match = device.serialNumber.match(/SN-(\d+)/);
             if (match) {
                 const num = parseInt(match[1]);
@@ -144,7 +200,6 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
             }
             return max;
         }, 0);
-
         return `SN-${(maxSerial + 1).toString().padStart(6, '0')}`;
     };
 
@@ -157,46 +212,17 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
     };
 
     const handleDeleteDevice = async (id: string) => {
-        if (!confirm("Are you SURE you want to retire this unit? This will permanently remove its identification data from the active matrix.")) return;
-
-        setIsSubmitting(true);
-        try {
-            await deleteDevice(id);
-            await loadDevices();
-            setIsEditing(false);
-            setEditingDevice(null);
-        } catch (error) {
-            console.error("Failed to delete device:", error);
-            alert("Error retiring unit. Check connection.");
-        } finally {
-            setIsSubmitting(false);
-        }
+        if (!confirm("Are you SURE you want to retire this unit?")) return;
+        deleteMutation.mutate(id);
     };
 
     const handleDuplicateDevice = async (device: Device) => {
-        if (!confirm(`Clone ${device.model} (${device.serialNumber})? A new unit with a unique serial number will be created.`)) return;
-
-        setIsSubmitting(true);
-        try {
-            await duplicateDevice(device.id);
-            await loadDevices();
-            alert("Device cloned successfully!");
-        } catch (error) {
-            console.error("Failed to duplicate device:", error);
-            alert("Error cloning unit. Check connection.");
-        } finally {
-            setIsSubmitting(false);
-        }
+        if (!confirm(`Clone ${device.model}?`)) return;
+        duplicateMutation.mutate(device.id);
     };
 
     const handleQuickStatusChange = async (deviceId: string, newStatus: Device['status']) => {
-        try {
-            await updateDeviceStatus(deviceId, newStatus);
-            await loadDevices();
-        } catch (error) {
-            console.error("Failed to update status:", error);
-            alert("Error updating status. Check connection.");
-        }
+        updateStatusMutation.mutate({ id: deviceId, status: newStatus });
     };
 
     const viewHistory = async (device: Device) => {
@@ -246,6 +272,29 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
     const [showCopyModal, setShowCopyModal] = useState(false);
     const [copyTargetCategory, setCopyTargetCategory] = useState<string>("");
 
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [renamedCategory, setRenamedCategory] = useState("");
+
+    const handleRenameCategory = async () => {
+        if (!editingCatalog || !renamedCategory.trim() || renamedCategory === editingCatalog.device_category) {
+            setIsRenaming(false);
+            return;
+        }
+
+        try {
+            await renameCategory(editingCatalog.device_category, renamedCategory.trim());
+            queryClient.invalidateQueries({ queryKey: ['adminCatalog'] });
+            queryClient.invalidateQueries({ queryKey: ['adminDevices'] });
+
+            // Update local state to reflect rename immediately
+            setEditingCatalog({ ...editingCatalog, device_category: renamedCategory.trim() });
+            setIsRenaming(false);
+        } catch (error) {
+            console.error("Rename failed:", error);
+            alert("Error during identity shift.");
+        }
+    };
+
     // Engine Params Tuning State
     const [tuning, setTuning] = useState<{ field: string } | null>(null);
     const [tuningValue, setTuningValue] = useState("");
@@ -274,6 +323,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
 
             await handleUpdateCatalog(updates);
             setTuning(null);
+            queryClient.invalidateQueries({ queryKey: ['adminCatalog'] });
         } catch (error) {
             console.error("Failed to update engine param:", error);
             alert("Error updating parameter");
@@ -296,7 +346,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         try {
             await updateCatalogSettings(editingCatalog.device_category, updates);
             await loadSettingsForUnit(editingCatalog.device_category);
-            await loadCategories();
+            queryClient.invalidateQueries({ queryKey: ['adminCatalog'] });
         } catch (error) {
             console.error("Failed to update catalog:", error);
             alert("Error updating catalog settings");
@@ -374,71 +424,70 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         }
     };
 
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
     const handleAddDevice = async (e: FormEvent) => {
         e.preventDefault();
-        if (!newDevice.name || !newDevice.serial_number) return;
+        setValidationErrors({});
 
-        setIsSubmitting(true);
-        try {
-            // Create object matching DB schema/service
-            const payload = {
-                ...newDevice,
-                connectors: newDevice.connectors.split(',').map(s => s.trim()).filter(Boolean),
-                asset_records: newDevice.asset_records.split(',').map(s => s.trim()).filter(Boolean)
-            };
-            await createDevice(payload);
-            setIsAdding(false);
-            setNewDevice({
-                name: "",
-                serial_number: "",
-                category: categories[0]?.device_category || "",
-                health: 100,
-                notes: "",
-                cost: 0,
-                supplier: "",
-                purchaseDate: "",
-                warrantyExpiry: "",
-                connectors: "",
-                asset_records: "",
-                controllers: 1,
-                storage_gb: 825,
-                firmware_version: "1.0.0"
+        const payload = {
+            ...newDevice,
+            serialNumber: newDevice.serial_number, // map to schema
+            connectors: newDevice.connectors.split(',').map(s => s.trim()).filter(Boolean),
+            asset_records: newDevice.asset_records.split(',').map(s => s.trim()).filter(Boolean)
+        };
+
+        const result = DeviceSchema.safeParse(payload);
+        if (!result.success) {
+            const errors: Record<string, string> = {};
+            result.error.issues.forEach(issue => {
+                errors[issue.path[0] as string] = issue.message;
             });
-            await loadDevices();
-        } catch (error) {
-            console.error("Failed to add device:", error);
-            alert("Error adding device. Serial number might be duplicate.");
-        } finally {
-            setIsSubmitting(false);
+            setValidationErrors(errors);
+            return;
         }
+
+        createMutation.mutate(payload);
     };
 
     const handleUpdateDevice = async (e: FormEvent) => {
         e.preventDefault();
         if (!editingDevice) return;
+        setValidationErrors({});
 
-        setIsSubmitting(true);
-        try {
-            await updateDevice(editingDevice.id, editingDevice);
-            await loadDevices();
-            setIsEditing(false);
-            setEditingDevice(null);
-        } catch (error) {
-            console.error("Failed to update device:", error);
-            alert("Error updating device.");
-        } finally {
-            setIsSubmitting(false);
+        const result = DeviceSchema.safeParse(editingDevice);
+        if (!result.success) {
+            const errors: Record<string, string> = {};
+            result.error.issues.forEach(issue => {
+                errors[issue.path[0] as string] = issue.message;
+            });
+            setValidationErrors(errors);
+            return;
         }
+
+        updateMutation.mutate({ id: editingDevice.id, data: editingDevice });
     };
 
 
     useEffect(() => {
-        console.log("FleetManager mounted, loading data...");
-        loadDevices();
-        loadCategories();
-    }, []);
+        console.log("FleetManager mounted, handling search params...");
 
-    const filteredDevices = (devices || []).filter(d =>
+        // Handle URL search params
+        const search = searchParams.get('search');
+        const category = searchParams.get('category');
+
+        if (search) {
+            setSearchTerm(search);
+            // Auto switch to list view if searching specific item
+            if (search.startsWith('SN-')) setViewMode('list');
+        }
+
+        if (category) {
+            setActiveCategory(category);
+        }
+    }, [searchParams]);
+
+    const filteredDevices = devices.filter((d: Device) =>
         d && ((d.serialNumber?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
             (d.model?.toLowerCase() || "").includes(searchTerm.toLowerCase())) &&
         (filterStatus === "all" || d.status?.toLowerCase() === filterStatus.toLowerCase()) &&
@@ -455,7 +504,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         }
     };
 
-    const uniqueCategories = ['all', ...Array.from(new Set((devices || []).map(d => d && d.category).filter(Boolean)))];
+    const uniqueCategories = ['all', ...Array.from(new Set(devices.map((d: Device) => d.category).filter(Boolean)))];
 
     if (loading) return <div className="py-20 flex items-center justify-center text-white font-black uppercase tracking-widest italic animate-pulse">Initializing Unit Matrix...</div>;
 
@@ -1041,12 +1090,13 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                                 </h4>
                                                                 <div className="space-y-4">
                                                                     <div className="space-y-2">
-                                                                        <label className="text-[9px] font-black text-gray-600 uppercase">Hardware Model</label>
+                                                                        <label className="text-[9px] font-black text-gray-600 uppercase">Device Designation</label>
                                                                         <input
                                                                             required
                                                                             value={editingDevice.model}
                                                                             onChange={e => setEditingDevice({ ...editingDevice, model: e.target.value })}
                                                                             className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-blue-500 outline-none font-bold text-xs"
+                                                                            placeholder="e.g. PlayStation 5 Pro"
                                                                         />
                                                                     </div>
                                                                     <div className="space-y-2">
@@ -1059,16 +1109,19 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                                         />
                                                                     </div>
                                                                     <div className="space-y-2">
-                                                                        <label className="text-[9px] font-black text-gray-600 uppercase">Deployment Category</label>
-                                                                        <select
+                                                                        <label className="text-[9px] font-black text-gray-600 uppercase">Deployment Category (Manual)</label>
+                                                                        <input
+                                                                            list="category-suggestions"
                                                                             value={editingDevice.category}
                                                                             onChange={e => setEditingDevice({ ...editingDevice, category: e.target.value })}
-                                                                            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-blue-500 outline-none font-bold text-xs appearance-none"
-                                                                        >
+                                                                            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-blue-500 outline-none font-bold text-xs"
+                                                                            placeholder="Type or select category..."
+                                                                        />
+                                                                        <datalist id="category-suggestions">
                                                                             {categories.map(c => (
-                                                                                <option key={c.id} value={c.device_category}>{c.device_category}</option>
+                                                                                <option key={c.id} value={c.device_category} />
                                                                             ))}
-                                                                        </select>
+                                                                        </datalist>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1257,16 +1310,48 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                 {/* STRATEGY CONSOLE */}
                                                 <div className="bg-black/50 border border-white/5 rounded-[2.5rem] p-10 space-y-8 relative overflow-hidden group">
                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-[#8B5CF6]/5 rounded-full blur-3xl -mr-16 -mt-16" />
-                                                    <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-[0.3em] flex items-center gap-2">
-                                                        <Activity size={14} className="text-[#8B5CF6]" /> Store Strategy Module
-                                                        <button
-                                                            onClick={() => setShowCopyModal(true)}
-                                                            className="ml-auto px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/20 rounded-lg flex items-center gap-1.5 text-[#8B5CF6] transition-all"
-                                                            title="Replicate configuration to peer categories"
-                                                        >
-                                                            <Layers size={10} />
-                                                            <span className="text-[8px] font-black uppercase">Sync Peer</span>
-                                                        </button>
+                                                    <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-[0.3em] flex items-center gap-2 group/title">
+                                                        {isRenaming ? (
+                                                            <div className="flex items-center gap-2 flex-1">
+                                                                <input
+                                                                    autoFocus
+                                                                    value={renamedCategory}
+                                                                    onChange={(e) => setRenamedCategory(e.target.value)}
+                                                                    onKeyDown={(e) => e.key === 'Enter' && handleRenameCategory()}
+                                                                    className="bg-black/50 border border-[#8B5CF6]/50 rounded-lg px-2 py-1 text-[10px] text-white outline-none w-full font-black uppercase"
+                                                                />
+                                                                <button onClick={handleRenameCategory} className="p-1 hover:text-emerald-500 transition-colors">
+                                                                    <CheckCircle2 size={12} />
+                                                                </button>
+                                                                <button onClick={() => setIsRenaming(false)} className="p-1 hover:text-red-500 transition-colors">
+                                                                    <X size={12} />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <Activity size={14} className="text-[#8B5CF6]" />
+                                                                <span className="truncate max-w-[150px]">{editingCatalog.device_category} Strategy Module</span>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setRenamedCategory(editingCatalog.device_category);
+                                                                        setIsRenaming(true);
+                                                                    }}
+                                                                    className="opacity-0 group-hover/title:opacity-100 transition-opacity hover:text-[#8B5CF6]"
+                                                                >
+                                                                    <Edit2 size={10} />
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {!isRenaming && (
+                                                            <button
+                                                                onClick={() => setShowCopyModal(true)}
+                                                                className="ml-auto px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/20 rounded-lg flex items-center gap-1.5 text-[#8B5CF6] transition-all"
+                                                                title="Replicate configuration to peer categories"
+                                                            >
+                                                                <Layers size={10} />
+                                                                <span className="text-[8px] font-black uppercase">Sync Peer</span>
+                                                            </button>
+                                                        )}
                                                     </h4>
 
                                                     <div className="space-y-6">
@@ -1676,7 +1761,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                     </div>
                                                 ) : (
                                                     <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-white/10 before:to-transparent">
-                                                        {unitHistory.map((log, idx) => (
+                                                        {unitHistory.map((log) => (
                                                             <div key={log.id} className="relative flex items-center gap-8 group">
                                                                 <div className={`w-10 h-10 rounded-full border-2 border-black flex items-center justify-center relative z-10 transition-transform group-hover:scale-110 ${log.event.includes('Rental') ? 'bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]' :
                                                                     log.event.includes('Maintenance') ? 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]' :
@@ -1795,14 +1880,15 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                         </h4>
                                         <div className="space-y-4">
                                             <div className="space-y-2">
-                                                <label className="text-[9px] font-black text-gray-600 uppercase">Hardware Model</label>
+                                                <label className="text-[9px] font-black text-gray-600 uppercase">Device Designation</label>
                                                 <input
                                                     required
                                                     value={newDevice.name}
                                                     onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
-                                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-[#8B5CF6] outline-none font-bold text-xs"
+                                                    className={`w-full bg-black/50 border ${validationErrors.model ? 'border-red-500' : 'border-white/10'} rounded-xl p-4 text-white focus:border-[#8B5CF6] outline-none font-bold text-xs`}
                                                     placeholder="PlayStation 5 Slim..."
                                                 />
+                                                {validationErrors.model && <p className="text-[8px] font-black text-red-500 uppercase tracking-widest mt-1">{validationErrors.model}</p>}
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="text-[9px] font-black text-gray-600 uppercase">Serial Matrix</label>
@@ -1810,18 +1896,24 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                     required
                                                     value={newDevice.serial_number}
                                                     onChange={e => setNewDevice({ ...newDevice, serial_number: e.target.value })}
-                                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-[#8B5CF6] outline-none font-mono text-xs"
+                                                    className={`w-full bg-black/50 border ${validationErrors.serialNumber ? 'border-red-500' : 'border-white/10'} rounded-xl p-4 text-white focus:border-[#8B5CF6] outline-none font-mono text-xs`}
                                                 />
+                                                {validationErrors.serialNumber && <p className="text-[8px] font-black text-red-500 uppercase tracking-widest mt-1">{validationErrors.serialNumber}</p>}
                                             </div>
                                             <div className="space-y-2">
-                                                <label className="text-[9px] font-black text-gray-600 uppercase">Fleet Category</label>
-                                                <select
+                                                <label className="text-[9px] font-black text-gray-600 uppercase">Fleet Category (Manual)</label>
+                                                <input
+                                                    list="new-asset-category-suggestions"
                                                     value={newDevice.category}
                                                     onChange={e => setNewDevice({ ...newDevice, category: e.target.value })}
                                                     className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-[#8B5CF6] outline-none font-bold text-xs"
-                                                >
-                                                    {categories.map(cat => <option key={cat.id} value={cat.device_category}>{cat.device_category}</option>)}
-                                                </select>
+                                                    placeholder="Type or select category..."
+                                                />
+                                                <datalist id="new-asset-category-suggestions">
+                                                    {categories.map(cat => (
+                                                        <option key={cat.id} value={cat.device_category} />
+                                                    ))}
+                                                </datalist>
                                             </div>
                                         </div>
                                     </div>
@@ -2005,7 +2097,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                     <h3 className="text-lg font-black uppercase text-white tracking-widest mb-2">Copy Configuration</h3>
                                     <p className="text-xs text-gray-500 font-medium leading-relaxed">
                                         Copy settings from <span className="text-[#8B5CF6] font-bold">{editingCatalog.device_category}</span> to another category.
-                                        This will overwrite target's pricing and limits.
+                                        This will overwrite target&apos;s pricing and limits.
                                     </p>
                                 </div>
 

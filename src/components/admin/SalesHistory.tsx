@@ -16,14 +16,18 @@ export function SalesHistory() {
     }, []);
 
     const loadData = async () => {
-        const [salesData, daily, monthly] = await Promise.all([
-            getSales(),
-            getDailyRevenue(),
-            getMonthlyRevenue()
-        ]);
-        setSales(salesData);
-        setDailyRevenue(daily);
-        setMonthlyRevenue(monthly);
+        try {
+            const [salesData, daily, monthly] = await Promise.all([
+                getSales(),
+                getDailyRevenue(),
+                getMonthlyRevenue()
+            ]);
+            setSales(salesData);
+            setDailyRevenue(daily);
+            setMonthlyRevenue(monthly);
+        } catch (error) {
+            console.error("SalesHistory loadData failed:", error);
+        }
     };
 
     const formatDate = (dateString: string) => {

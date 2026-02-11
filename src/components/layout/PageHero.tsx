@@ -31,7 +31,8 @@ export default function PageHero({ title, subtitle, images, children, height = "
     }, [images, settings]);
 
     // Use defaults during loading or server-side rendering to prevent hydration mismatch
-    const backgroundOverlay = (isLoading || !settings) ? 60 : (settings.backgroundEffects?.overlayDarkness ?? 60);
+    const DEFAULT_OVERLAY = 60;
+    const backgroundOverlay = (isLoading || !settings) ? DEFAULT_OVERLAY : (settings.backgroundEffects?.overlayDarkness ?? DEFAULT_OVERLAY);
     const blurAmount = (isLoading || !settings) ? 0 : (settings.backgroundEffects?.blurIntensity ?? 0);
     const opacity = (isLoading || !settings) ? 1 : ((settings.backgroundEffects?.imageOpacity ?? 100) / 100);
 
@@ -65,6 +66,7 @@ export default function PageHero({ title, subtitle, images, children, height = "
                 <div
                     className="absolute inset-0 bg-black"
                     style={{ opacity: backgroundOverlay / 100 }}
+                    suppressHydrationWarning
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-[#050505]" />
             </div>

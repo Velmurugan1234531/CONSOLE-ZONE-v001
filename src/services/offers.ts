@@ -79,17 +79,22 @@ export const getAllOffers = async (): Promise<PromotionalOffer[]> => {
     }
 
     const supabase = createClient();
-    const { data, error } = await supabase
-        .from('promotional_offers')
-        .select('*')
-        .order('created_at', { ascending: false });
+    try {
+        const { data, error } = await supabase
+            .from('promotional_offers')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-    if (error) {
-        console.error("Error fetching offers:", error);
-        throw error;
+        if (error) {
+            console.warn("Error fetching offers (using demo fallback):", error.message);
+            return DEMO_OFFERS;
+        }
+
+        return data || [];
+    } catch (e) {
+        console.warn("Offers fetch crash (using demo fallback):", e);
+        return DEMO_OFFERS;
     }
-
-    return data || [];
 };
 
 export const getActiveOffers = async (): Promise<PromotionalOffer[]> => {

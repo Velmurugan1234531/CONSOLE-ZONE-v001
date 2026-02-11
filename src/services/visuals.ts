@@ -108,7 +108,7 @@ export interface VisualSettings {
     pageEffects: Record<string, BackgroundEffects>;
 }
 
-const DEFAULT_SETTINGS: VisualSettings = {
+export const DEFAULT_SETTINGS: VisualSettings = {
     mediaGallery: [
         "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&q=80",
         "https://images.unsplash.com/photo-1605901309584-818e25960b8f?auto=format&fit=crop&q=80",
@@ -159,7 +159,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
     globalLighting: 95,
     backgroundEffects: {
         imageOpacity: 100,      // Full brightness
-        overlayDarkness: 0,     // No overlay
+        overlayDarkness: 60,    // Standard overlay (matches PageHero fallback)
         blurIntensity: 0,       // No blur
         slideshowSpeed: 10      // 10 seconds default
     },

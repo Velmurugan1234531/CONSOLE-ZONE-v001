@@ -4,30 +4,21 @@ import { Users, Search, MoreHorizontal, Mail, Calendar, Shield, X, ChevronRight,
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface User {
-    id: number;
-    name: string;
-    email: string;
-    joined: string;
-    role: string;
-    status: string;
-    trust: number;
-    avatar: string;
-}
+import { useQuery } from "@tanstack/react-query";
+import { getUsers } from "@/services/admin";
+import { User } from "@/lib/schemas";
 
 export default function UsersPage() {
-    const [selectedUser, setSelectedUser] = useState<number | null>(null);
+    const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
-    const users: User[] = [
-        { id: 1, name: "Rahul Kumar", email: "rahul.k@example.com", joined: "Jan 12, 2024", role: "Member", status: "Active", trust: 94, avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=100&auto=format&fit=crop" },
-        { id: 2, name: "Priya Sharma", email: "priya.s@example.com", joined: "Dec 05, 2023", role: "Elite", status: "Active", trust: 99, avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100" },
-        { id: 3, name: "Amit Mishra", email: "amit.m@example.com", joined: "Jan 20, 2024", role: "Member", status: "Pending", trust: 65, avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100" },
-        { id: 4, name: "Sneha Reddy", email: "sneha.r@example.com", joined: "Nov 15, 2023", role: "Admin", status: "Active", trust: 100, avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=100" },
-        { id: 5, name: "Vikram Singh", email: "vikram.s@example.com", joined: "Feb 01, 2024", role: "Member", status: "Banned", trust: 12, avatar: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=100" },
-    ];
+    const { data: users = [], isLoading } = useQuery<User[]>({
+        queryKey: ['adminUsers'],
+        queryFn: getUsers
+    });
 
-    // Mock history data
+    const activeUser = users.find((u: User) => u.id === selectedUser);
+
+    // Mock history data - in a real app this would be another query
     const history = {
         rentals: [
             { id: "RNT-101", product: "PS5 Console", date: "Jan 10 - Jan 17", status: "Returned", cost: "₹3,500" },
@@ -40,6 +31,14 @@ export default function UsersPage() {
             { id: "SEL-001", product: "Old Xbox One", date: "Nov 20, 2023", status: "Sold to Us", cost: "₹8,000 (Payout)" }
         ]
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#10B981]"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex gap-6 min-h-screen animate-in fade-in duration-500">
@@ -74,7 +73,7 @@ export default function UsersPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                            {users.map((user) => (
+                            {users.map((user: User) => (
                                 <tr
                                     key={user.id}
                                     className={`group hover:bg-white/[0.02] transition-colors cursor-pointer ${selectedUser === user.id ? 'bg-white/[0.05]' : ''}`}
@@ -82,11 +81,17 @@ export default function UsersPage() {
                                 >
                                     <td className="p-4 pl-6">
                                         <div className="flex items-center gap-3">
-                                            <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-[#10B981] transition-colors" />
+                                            {user.avatar_url ? (
+                                                <img src={user.avatar_url} alt={user.full_name} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-[#10B981] transition-colors" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-white/10 text-gray-500 font-bold">
+                                                    {user.full_name?.charAt(0) || 'U'}
+                                                </div>
+                                            )}
                                             <div>
-                                                <h3 className="text-white font-bold text-sm">{user.name}</h3>
+                                                <h3 className="text-white font-bold text-sm">{user.full_name || 'Anonymous User'}</h3>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${user.trust > 90 ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : user.trust > 70 ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>TRUST {user.trust}%</span>
+                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${(user.trust_score || 0) > 90 ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : (user.trust_score || 0) > 70 ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>TRUST {user.trust_score || 0}%</span>
                                                     <span className="text-[10px] text-gray-500 font-bold md:hidden">{user.role}</span>
                                                 </div>
                                             </div>
@@ -94,7 +99,7 @@ export default function UsersPage() {
                                     </td>
                                     <td className="p-4 hidden md:table-cell text-sm text-gray-400">{user.email}</td>
                                     <td className="p-4 hidden md:table-cell">
-                                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${user.role === 'Admin' ? 'bg-orange-500/10 text-orange-500' : 'bg-gray-800 text-gray-400'
+                                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${user.role === 'admin' ? 'bg-orange-500/10 text-orange-500' : 'bg-gray-800 text-gray-400'
                                             }`}>{user.role}</span>
                                     </td>
                                     <td className="p-4">
@@ -121,29 +126,35 @@ export default function UsersPage() {
 
                     <div className="text-center mb-8">
                         <div className="w-24 h-24 rounded-full p-1 border-2 border-[#10B981] mx-auto mb-4 relative">
-                            <img
-                                src={users.find(u => u.id === selectedUser)?.avatar}
-                                className="w-full h-full rounded-full object-cover"
-                                alt="Profile"
-                            />
+                            {activeUser?.avatar_url ? (
+                                <img
+                                    src={activeUser.avatar_url}
+                                    className="w-full h-full rounded-full object-cover"
+                                    alt="Profile"
+                                />
+                            ) : (
+                                <div className="w-full h-full rounded-full bg-gray-800 flex items-center justify-center text-3xl font-bold text-gray-600">
+                                    {activeUser?.full_name?.charAt(0) || 'U'}
+                                </div>
+                            )}
                             <div className="absolute bottom-0 right-0 bg-[#10B981] p-1.5 rounded-full border-2 border-[#0a0a0a]">
                                 <Shield size={12} className="text-black" />
                             </div>
                         </div>
-                        <h2 className="text-xl font-black text-white uppercase">{users.find(u => u.id === selectedUser)?.name}</h2>
-                        <p className="text-gray-400 text-sm mb-4">{users.find(u => u.id === selectedUser)?.email}</p>
+                        <h2 className="text-xl font-black text-white uppercase">{activeUser?.full_name}</h2>
+                        <p className="text-gray-400 text-sm mb-4">{activeUser?.email}</p>
 
                         {/* Trust Matrix Summary */}
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
                             <div className="flex justify-between items-center mb-3">
                                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Trust Index</span>
-                                <span className={`text-sm font-black ${users.find(u => u.id === selectedUser)!.trust > 90 ? 'text-emerald-500' : 'text-blue-500'}`}>{users.find(u => u.id === selectedUser)?.trust}%</span>
+                                <span className={`text-sm font-black ${(activeUser?.trust_score || 0) > 90 ? 'text-emerald-500' : 'text-blue-500'}`}>{activeUser?.trust_score || 0}%</span>
                             </div>
                             <div className="h-1.5 w-full bg-black rounded-full overflow-hidden mb-4">
                                 <motion.div
                                     initial={{ width: 0 }}
-                                    animate={{ width: `${users.find(u => u.id === selectedUser)?.trust}%` }}
-                                    className={`h-full ${users.find(u => u.id === selectedUser)!.trust > 90 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                    animate={{ width: `${activeUser?.trust_score || 0}%` }}
+                                    className={`h-full ${(activeUser?.trust_score || 0) > 90 ? 'bg-emerald-500' : 'bg-blue-500'}`}
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
@@ -159,8 +170,10 @@ export default function UsersPage() {
                         </div>
 
                         <div className="flex justify-center gap-2 mt-4">
-                            <span className="bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold px-3 py-1 rounded-full border border-[#10B981]/20">ACTIVE MEMBER</span>
-                            <span className="bg-white/5 text-gray-400 text-[10px] font-bold px-3 py-1 rounded-full border border-white/10">ID: #8832</span>
+                            <span className="bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold px-3 py-1 rounded-full border border-[#10B981]/20">
+                                {activeUser?.kyc_status === 'APPROVED' ? 'VERIFIED' : 'PENDING KYC'}
+                            </span>
+                            <span className="bg-white/5 text-gray-400 text-[10px] font-bold px-3 py-1 rounded-full border border-white/10">ID: #{activeUser?.id.slice(0, 8)}</span>
                         </div>
                     </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { VisualsService, VisualSettings } from "@/services/visuals";
+import { VisualsService, VisualSettings, DEFAULT_SETTINGS } from "@/services/visuals";
 
 interface VisualsContextType {
     settings: VisualSettings | null;
@@ -13,7 +13,7 @@ interface VisualsContextType {
 const VisualsContext = createContext<VisualsContextType | undefined>(undefined);
 
 export function VisualsProvider({ children }: { children: React.ReactNode }) {
-    const [settings, setSettings] = useState<VisualSettings | null>(null);
+    const [settings, setSettings] = useState<VisualSettings>(DEFAULT_SETTINGS);
     const [isLoading, setIsLoading] = useState(true);
 
     const loadSettings = async () => {

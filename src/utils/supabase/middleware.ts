@@ -16,6 +16,14 @@ export async function updateSession(request: NextRequest) {
         return supabaseResponse;
     }
 
+    // AUTH BYPASS for Local Development
+    const authBypass = process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true';
+    const bypassCookie = request.cookies.get('auth-bypass')?.value === 'true';
+
+    if (authBypass && bypassCookie) {
+        return supabaseResponse;
+    }
+
     const supabase = createServerClient(
         supabaseUrl,
         supabaseKey,

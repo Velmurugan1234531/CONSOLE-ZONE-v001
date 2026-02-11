@@ -71,6 +71,16 @@ export default function LoginPage() {
         }
     };
 
+    const handleDemoLogin = () => {
+        setLoading(true);
+        // Set bypass cookie
+        document.cookie = "auth-bypass=true; path=/; max-age=3600";
+        setTimeout(() => {
+            router.push("/");
+            router.refresh();
+        }, 800);
+    };
+
     return (
         <div className="min-h-screen bg-[#050505] relative overflow-hidden font-display">
             <PageHero
@@ -189,6 +199,17 @@ export default function LoginPage() {
                                 <span className="hidden sm:inline">Apple</span>
                             </button>
                         </div>
+
+                        {process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true' && (
+                            <button
+                                onClick={handleDemoLogin}
+                                disabled={loading}
+                                className="w-full mt-4 py-4 bg-white/5 border border-dashed border-white/20 hover:border-[#A855F7]/50 hover:bg-[#A855F7]/5 text-gray-400 hover:text-white font-black uppercase tracking-[0.2em] rounded-2xl flex items-center justify-center gap-3 transition-all"
+                            >
+                                <Lock size={16} />
+                                <span>Demo / Developer Login</span>
+                            </button>
+                        )}
 
                         <p className="mt-10 text-center text-gray-500/80 text-[10px] font-black uppercase tracking-[0.2em]">
                             New Operative?{" "}

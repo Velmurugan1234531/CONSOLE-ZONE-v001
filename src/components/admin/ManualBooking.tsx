@@ -33,7 +33,7 @@ export function ManualBooking({ onSuccess }: { onSuccess: () => void }) {
             setUsers(userData);
             setProducts(productData.filter((p: any) => p.type === 'rent'));
         } catch (e) {
-            console.error(e);
+            console.error("ManualBooking loadData failed:", e);
         } finally {
             setLoading(false);
         }

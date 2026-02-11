@@ -15,12 +15,15 @@ import { StockService } from "@/services/stock";
 
 import PageHero from "@/components/layout/PageHero";
 
+
 export default function RentalPage() {
     usePageSEO('rentals');
     const stock = StockService.useStock();
     const [catalogSettings, setCatalogSettings] = useState<CatalogSettings[]>([]);
     const [activeTab, setActiveTab] = useState<string>('');
     const [visualSettings, setVisualSettings] = useState<VisualSettings | null>(null);
+    const [filterCategory, setFilterCategory] = useState('All');
+    const [sortBy, setSortBy] = useState<'name' | 'available' | 'price'>('name');
 
     // Sync activeTab with first available stock item
     useEffect(() => {
@@ -45,6 +48,42 @@ export default function RentalPage() {
         };
         load();
     }, []);
+
+    // Derive Categories
+    const categories = Array.from(new Set(stock.map(s => {
+        if (s.id.includes('ps')) return 'PlayStation';
+        if (s.id.includes('xbox')) return 'Xbox';
+        if (s.id.includes('vr') || s.id.includes('quest')) return 'VR';
+        return 'Other';
+    })));
+
+    const filteredStock = stock
+        .filter(item => {
+            // 1. Catalog Enable Check
+            if (catalogSettings.length > 0) {
+                const config = catalogSettings.find(s => s.device_category === item.label);
+                if (config && !config.is_enabled) return false;
+            }
+
+            // 2. Category Filter
+            if (filterCategory === 'All') return true;
+            if (filterCategory === 'PlayStation') return item.id.includes('ps');
+            if (filterCategory === 'Xbox') return item.id.includes('xbox');
+            if (filterCategory === 'VR') return item.id.includes('vr') || item.id.includes('quest');
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortBy === 'name') return a.name.localeCompare(b.name);
+            if (sortBy === 'available') return b.available - a.available;
+            if (sortBy === 'price') {
+                const configA = catalogSettings.find(s => s.device_category === a.label);
+                const configB = catalogSettings.find(s => s.device_category === b.label);
+                const priceA = configA?.daily_rate || 0;
+                const priceB = configB?.daily_rate || 0;
+                return priceA - priceB;
+            }
+            return 0;
+        });
 
     const activeConsoleBgs = (visualSettings?.consoleBackgrounds?.[activeTab] || []);
     const backgrounds = activeConsoleBgs.length > 0
@@ -124,23 +163,19 @@ export default function RentalPage() {
                 images={backgrounds}
                 height="100vh"
             >
-                <div className="inline-flex bg-black/40 backdrop-blur-md p-1 rounded-2xl border border-white/10 overflow-x-auto max-w-full">
-                    {stock.filter(item => {
-                        // Allow any category if no settings exist, or if the specific category is enabled
-                        // We match by the item's label (original category name) against the settings
-                        if (catalogSettings.length === 0) return true;
-                        const config = catalogSettings.find(s => s.device_category === item.label);
-                        return config ? config.is_enabled : true; // Default to true if no config found (new categories)
-                    }).map((item) => (
-                        <button
-                            key={item.id}
-                            onClick={() => setActiveTab(item.id)}
-                            className={`px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all whitespace-nowrap ${activeTab === item.id ? 'bg-[#A855F7] text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'text-gray-400 hover:text-white'
-                                }`}
-                        >
-                            {item.label || item.name}
-                        </button>
-                    ))}
+                <div className="w-full max-w-7xl mx-auto px-4 flex flex-col gap-6">
+                    <div className="inline-flex bg-black/40 backdrop-blur-md p-1 rounded-2xl border border-white/10 overflow-x-auto max-w-full self-center">
+                        {filteredStock.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                className={`px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all whitespace-nowrap ${activeTab === item.id ? 'bg-[#A855F7] text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'text-gray-400 hover:text-white'
+                                    }`}
+                            >
+                                {item.label || item.name}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </PageHero>
 
@@ -219,6 +254,17 @@ export default function RentalPage() {
                                                 ) : <span className="flex items-center gap-2"><ArrowRight size={20} className="rotate-45" /> SOLD OUT</span>}
                                             </span>
                                         </Link>
+
+                                        {/* Dev Mode / Admin Link */}
+                                        {process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true' && (
+                                            <Link
+                                                href={`/admin/fleet?search=${activeTab}`}
+                                                target="_blank"
+                                                className="block w-full text-center py-2 text-[10px] font-mono text-gray-500 hover:text-[#8B5CF6] uppercase tracking-widest transition-colors opacity-50 hover:opacity-100"
+                                            >
+                                                Manage in Matrix
+                                            </Link>
+                                        )}
 
 
                                     </div>
