@@ -14,8 +14,8 @@ async function testCreateDevice() {
     console.log("Testing createDevice resilience...");
     try {
         const newDevice = await createDevice({
-            name: "Test Console",
-            serial_number: "TEST-SN-001",
+            model: "Test Console",
+            serialNumber: "TEST-SN-001",
             category: "PS5",
             health: 100,
             notes: "Test creation",

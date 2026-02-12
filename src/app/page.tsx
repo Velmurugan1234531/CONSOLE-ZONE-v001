@@ -160,7 +160,7 @@ export default function Home() {
                                             <div className="text-2xl font-black text-white italic tracking-tighter">₹{item.price.toLocaleString()}</div>
                                         </div>
                                         <button
-                                            onClick={() => addItem({ id: item.id, name: item.name, price: item.price, image: item.image, quantity: 1 })}
+                                            onClick={() => addItem({ id: item.id, name: item.name, price: item.price, image: item.image || '', quantity: 1 })}
                                             className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-[#A855F7] transition-all"
                                         >
                                             <ShoppingBag size={20} />

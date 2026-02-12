@@ -1052,8 +1052,8 @@ export const createDevice = async (deviceData: {
         const { data, error } = await supabase
             .from('consoles')
             .insert([{
-                name: deviceData.name,
-                serial_number: deviceData.serial_number,
+                name: deviceData.model,
+                serial_number: deviceData.serialNumber,
                 category: deviceData.category,
                 health: deviceData.health,
                 notes: deviceData.notes || '',
@@ -1077,8 +1077,8 @@ export const createDevice = async (deviceData: {
         // Fallback: Create mock device in local storage
         const newDevice: Device = {
             id: `demo-local-${Date.now()}`,
-            serialNumber: deviceData.serial_number,
-            model: deviceData.name,
+            serialNumber: deviceData.serialNumber,
+            model: deviceData.model,
             category: deviceData.category,
             status: 'Ready' as Device['status'],
             health: deviceData.health,
