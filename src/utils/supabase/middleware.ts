@@ -19,8 +19,12 @@ export async function updateSession(request: NextRequest) {
     // AUTH BYPASS for Local Development
     const authBypass = process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true';
     const bypassCookie = request.cookies.get('auth-bypass')?.value === 'true';
+    const firebaseSession = request.cookies.get('firebase-session')?.value;
 
-    if (authBypass && bypassCookie) {
+    if ((authBypass && bypassCookie) || firebaseSession) {
+        // If we have a Firebase session, we treat the user as authenticated.
+        // We can skip the Supabase getUser() check to avoid redirect loops.
+        // However, if we need Supabase roles, we'd still need a mapping.
         return supabaseResponse;
     }
 
@@ -58,6 +62,8 @@ export async function updateSession(request: NextRequest) {
     // 1. Public/Guest Redirection (Force Login)
     if (
         !user &&
+        pathname !== '/' &&
+        !pathname.startsWith('/showroom') &&
         !pathname.startsWith('/login') &&
         !pathname.startsWith('/signup') &&
         !pathname.startsWith('/auth') &&
@@ -71,11 +77,12 @@ export async function updateSession(request: NextRequest) {
     }
 
     // 2. Admin Route Protection (RBAC)
-    if (user && pathname.startsWith('/admin')) {
+    if ((user || firebaseSession) && pathname.startsWith('/admin')) {
+        const userId = user?.id || firebaseSession;
         const { data: profile } = await supabase
-            .from('profiles')
+            .from('users')
             .select('role')
-            .eq('id', user.id)
+            .eq('id', userId)
             .single()
 
         if (profile?.role !== 'admin') {

@@ -189,7 +189,7 @@ export const validateOfferCode = async (
         });
 
     if (error) {
-        console.error("Error validating offer:", error);
+        console.error(`Error validating offer: ${error.message || error}`);
         return {
             is_valid: false,
             discount_type: null,
@@ -220,7 +220,7 @@ export const createOffer = async (offerData: Omit<PromotionalOffer, 'id' | 'curr
         .single();
 
     if (error) {
-        console.error("Error creating offer:", error);
+        console.error(`Error creating offer: ${error.message || error}`);
         throw error;
     }
 
@@ -242,7 +242,7 @@ export const updateOffer = async (id: string, updates: Partial<PromotionalOffer>
         .single();
 
     if (error) {
-        console.error("Error updating offer:", error);
+        console.error(`Error updating offer: ${error.message || error}`);
         throw error;
     }
 
@@ -262,7 +262,7 @@ export const deleteOffer = async (id: string): Promise<boolean> => {
         .eq('id', id);
 
     if (error) {
-        console.error("Error deleting offer:", error);
+        console.error(`Error deleting offer: ${error.message || error}`);
         throw error;
     }
 
@@ -284,7 +284,7 @@ export const incrementOfferUsage = async (code: string): Promise<void> => {
         .rpc('increment_offer_usage', { p_code: code });
 
     if (error) {
-        console.error("Error incrementing offer usage:", error);
+        console.error(`Error incrementing offer usage: ${error.message || error}`);
     }
 };
 

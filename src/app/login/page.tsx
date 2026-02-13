@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { auth } from "@/lib/firebase";
+import {
+    signInWithEmailAndPassword,
+    signInWithPopup,
+    GoogleAuthProvider,
+    OAuthProvider
+} from "firebase/auth";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,25 +21,29 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
-    const supabase = createClient();
     const { settings } = useVisuals();
-
     const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-
-        if (error) {
-            setError(error.message);
-            setLoading(false);
-        } else {
+        try {
+            const { user } = await signInWithEmailAndPassword(auth, email, password);
+            // Set session cookie for middleware
+            document.cookie = `firebase-session=${user.uid}; path=/; max-age=3600; SameSite=Lax`;
             router.push("/");
             router.refresh();
+        } catch (err: any) {
+            setError(err.message || "Authentication failed. Please check your credentials.");
+            // Tactical Security Protocol: Log breach attempt
+            try {
+                const { Transmissions } = await import("@/utils/neural-messages");
+                const transmission = Transmissions.SECURITY.BREACH("LOGIN_PORTAL");
+                console.warn(`[${transmission.title}] ${transmission.message} - Attempted by: ${email}`);
+            } catch (e) {
+                // Ignore notification failure during login
+            }
+            setLoading(false);
         }
     };
 
@@ -41,15 +51,15 @@ export default function LoginPage() {
         setLoading(true);
         setError(null);
 
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-            },
-        });
-
-        if (error) {
-            setError(error.message);
+        const provider = new GoogleAuthProvider();
+        try {
+            const { user } = await signInWithPopup(auth, provider);
+            // Set session cookie for middleware
+            document.cookie = `firebase-session=${user.uid}; path=/; max-age=3600; SameSite=Lax`;
+            router.push("/");
+            router.refresh();
+        } catch (err: any) {
+            setError(err.message || "Google authentication failed.");
             setLoading(false);
         }
     };
@@ -58,15 +68,13 @@ export default function LoginPage() {
         setLoading(true);
         setError(null);
 
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "apple",
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-            },
-        });
-
-        if (error) {
-            setError(error.message);
+        const provider = new OAuthProvider("apple.com");
+        try {
+            await signInWithPopup(auth, provider);
+            router.push("/");
+            router.refresh();
+        } catch (err: any) {
+            setError(err.message || "Apple authentication failed.");
             setLoading(false);
         }
     };

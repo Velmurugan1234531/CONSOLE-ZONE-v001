@@ -42,6 +42,16 @@ export default function CartPanel() {
         try {
             const orderData = await handleCheckout(totalPrice);
 
+            if (orderData.demoMode) {
+                console.warn("🎮 Payments in Demo Mode - Auto-confirming");
+                alert("Demo Mode: Simulating Payment Process...");
+                setTimeout(() => {
+                    alert("Order Placed Successfully (Demo)!");
+                    setIsCartOpen(false);
+                }, 1000);
+                return;
+            }
+
             const options = {
                 key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
                 amount: orderData.amount,
@@ -65,9 +75,17 @@ export default function CartPanel() {
 
             const rzp = new window.Razorpay(options);
             rzp.open();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Checkout error:", error);
-            alert("Failed to initialize checkout.");
+            if (error?.message?.includes("Invalid Razorpay Credentials")) {
+                alert("⚠️ Razorpay Setup Pending: Proceeding in Demo Mode...");
+                setTimeout(() => {
+                    alert("Order Placed Successfully (Demo Fallback)!");
+                    setIsCartOpen(false);
+                }, 1000);
+            } else {
+                alert("Failed to initialize checkout. Please check console.");
+            }
         } finally {
             setIsLoading(false);
         }

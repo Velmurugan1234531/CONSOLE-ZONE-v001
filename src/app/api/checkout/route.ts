@@ -5,10 +5,15 @@ import Razorpay from "razorpay";
 const key_id = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
-const isConfigured = !!(key_id && key_secret && key_id !== 'YOUR_RAZORPAY_KEY_ID');
+const isConfigured = !!(
+    key_id &&
+    key_secret &&
+    key_id !== 'YOUR_RAZORPAY_KEY_ID' &&
+    !key_id.includes('DEMO')
+);
 
 if (!isConfigured) {
-    console.warn("⚠️  RAZORPAY NOT CONFIGURED - Running in DEMO mode. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to .env.local for live payments.");
+    console.warn("⚠️  RAZORPAY NOT CONFIGURED - Running in DEMO mode.");
 }
 
 const razorpay = isConfigured ? new Razorpay({
@@ -41,8 +46,16 @@ export async function POST(request: Request) {
                 status: "created",
                 attempts: 0,
                 notes: { demo: "true" },
-                created_at: Math.floor(Date.now() / 1000)
+                created_at: Math.floor(Date.now() / 1000),
+                demoMode: true
             });
+        }
+
+        if (isNaN(amount)) {
+            return NextResponse.json(
+                { error: "Invalid Amount: Received NaN" },
+                { status: 400 }
+            );
         }
 
         // LIVE MODE: Create actual Razorpay order
@@ -52,14 +65,35 @@ export async function POST(request: Request) {
             receipt: `receipt_${Date.now()}`,
         };
 
-        const order = await razorpay.orders.create(options);
+        try {
+            const order = await razorpay.orders.create(options);
+            return NextResponse.json(order);
+        } catch (razorpayError: any) {
+            console.error("Razorpay API Call Failed:", razorpayError);
 
-        return NextResponse.json(order);
-    } catch (error) {
-        console.error("Razorpay Error:", error);
+            // If it's an authentication error, imply invalid keys
+            if (razorpayError.statusCode === 401) {
+                return NextResponse.json(
+                    { error: "Invalid Razorpay Credentials", details: razorpayError, demoMode: true },
+                    { status: 401 }
+                );
+            }
+
+            throw razorpayError; // Re-throw to be caught by outer catch for 500
+        }
+    } catch (error: any) {
+        console.error("Payment Route Error:", error);
+
+        // Construct a safe error object
+        const safeError = {
+            message: error.message || "Unknown Error",
+            code: error.code || error.statusCode || "INTERNAL_SERVER_ERROR",
+            description: error.description || error.error?.description
+        };
+
         return NextResponse.json(
-            { error: "Internal Server Error" },
-            { status: 500 }
+            { error: safeError.message, details: safeError },
+            { status: error.statusCode || 500 }
         );
     }
 }

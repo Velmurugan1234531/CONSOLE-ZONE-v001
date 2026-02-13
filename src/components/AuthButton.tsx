@@ -1,6 +1,7 @@
 "use client";
 
-import { createClient } from "@/utils/supabase/client";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { Loader2, LogIn, User, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -8,23 +9,57 @@ import Link from "next/link";
 export default function AuthButton() {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<any>(null);
-    const supabase = createClient();
 
     useEffect(() => {
-        const getUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setUser(session?.user ?? null);
+        // Priority: Check real Firebase session
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+                // Adapt Firebase user object to match expected UI structure
+                setUser({
+                    ...firebaseUser,
+                    user_metadata: {
+                        full_name: firebaseUser.displayName,
+                        avatar_url: firebaseUser.photoURL
+                    }
+                });
+            } else {
+                // Fallback: Check for Local Demo User
+                const demoUser = localStorage.getItem('DEMO_USER_SESSION');
+                if (demoUser) {
+                    setUser(JSON.parse(demoUser));
+                } else {
+                    setUser(null);
+                }
+            }
             setLoading(false);
-        };
-
-        getUser();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
-            setUser(session?.user ?? null);
         });
 
-        return () => subscription.unsubscribe();
-    }, [supabase.auth]);
+        return () => unsubscribe();
+    }, []);
+
+    const handleDemoLogin = () => {
+        const demoUser = {
+            id: 'demo-user-123',
+            email: 'agent@console.zone',
+            user_metadata: {
+                full_name: 'Agent 47',
+                avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop'
+            }
+        };
+        localStorage.setItem('DEMO_USER_SESSION', JSON.stringify(demoUser));
+        setUser(demoUser);
+    };
+
+    const handleSignOut = async () => {
+        try {
+            await firebaseSignOut(auth);
+            localStorage.removeItem('DEMO_USER_SESSION');
+            document.cookie = "firebase-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            setUser(null);
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
+    };
 
     if (loading) {
         return (
@@ -36,38 +71,39 @@ export default function AuthButton() {
 
     if (user) {
         return (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
                 <Link
                     href="/profile"
-                    className="flex items-center gap-2 px-4 py-2 bg-[#A855F7]/10 hover:bg-[#A855F7]/20 border border-[#A855F7]/20 rounded-lg text-sm font-bold transition-all text-white group"
+                    className="w-10 h-10 rounded-full border border-white/10 bg-white/5 overflow-hidden relative group hover:border-[#A855F7] transition-all flex items-center justify-center"
+                    title="Client Profile"
                 >
-                    <div className="w-5 h-5 rounded-full bg-[#A855F7] flex items-center justify-center text-[10px] text-white overflow-hidden">
-                        {user.user_metadata?.avatar_url ? (
-                            <img src={user.user_metadata.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                            <User size={12} />
-                        )}
-                    </div>
-                    <span className="max-w-[80px] truncate">{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+                    {user.user_metadata?.avatar_url ? (
+                        <img src={user.user_metadata.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                        <User size={18} className="text-gray-400 group-hover:text-[#A855F7] transition-colors" />
+                    )}
                 </Link>
-                <button
-                    onClick={() => supabase.auth.signOut()}
-                    className="p-2 text-gray-500 hover:text-red-500 transition-colors"
-                    title="Logout"
-                >
-                    <LogOut size={18} />
-                </button>
             </div>
         );
     }
 
     return (
-        <Link
-            href="/login"
-            className="flex items-center gap-2 px-6 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg text-sm font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 text-white"
-        >
-            <LogIn size={16} className="text-[#A855F7]" />
-            Login
-        </Link>
+        <div className="flex items-center gap-2">
+            <Link
+                href="/login"
+                className="flex items-center gap-2 px-6 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg text-sm font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 text-white"
+            >
+                <LogIn size={16} className="text-[#A855F7]" />
+                Login
+            </Link>
+            {/* Quick Demo Access for Testing */}
+            <button
+                onClick={handleDemoLogin}
+                className="text-[10px] text-gray-500 hover:text-white uppercase font-bold tracking-widest px-2"
+                title="Enter Demo Mode"
+            >
+                [DEMO]
+            </button>
+        </div>
     );
 }

@@ -26,7 +26,7 @@ export async function POST(req: Request) {
             responseText = `We have ${count} total items in inventory. ${lowStock} items are low on stock.`;
 
         } else if (lowerQuery.includes("user") || lowerQuery.includes("customer")) {
-            const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+            const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
             responseText = `We have ${count} registered users.`;
 
         } else if (lowerQuery.includes("overdue")) {

@@ -24,6 +24,7 @@ function LoadingFallback() {
 }
 
 import QueryProvider from "@/providers/QueryProvider";
+import "@/lib/firebase";
 
 export default function RootLayout({
   children,

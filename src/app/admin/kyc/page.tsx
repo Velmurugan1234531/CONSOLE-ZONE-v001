@@ -1,47 +1,49 @@
 "use client";
 
-import { useState } from "react";
-import { Check, X, FileText, User, Eye } from "lucide-react";
-import { motion } from "framer-motion";
 
-// Mock Data
-const initialStandardDocuments = [
-    {
-        id: 1,
-        user: "Alex Chen",
-        avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=100&auto=format&fit=crop",
-        type: "ID Card",
-        url: "https://images.unsplash.com/photo-1549923746-c502d488b3ea?q=80&w=300",
-        status: "pending",
-        date: "2026-01-28"
-    },
-    {
-        id: 2,
-        user: "Sarah Jones",
-        avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100",
-        type: "Driver License",
-        url: "https://images.unsplash.com/photo-1549923746-c502d488b3ea?q=80&w=300",
-        status: "pending",
-        date: "2026-01-27"
-    },
-    {
-        id: 3,
-        user: "Mike Ross",
-        avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100",
-        type: "Passport",
-        url: "https://images.unsplash.com/photo-1549923746-c502d488b3ea?q=80&w=300",
-        status: "rejected",
-        date: "2026-01-26"
-    },
-];
+
+import { useState, useEffect } from "react";
+import { Check, X, FileText, User, Eye, Loader2, Phone } from "lucide-react";
+import { motion } from "framer-motion";
+import { getPendingKYCRequests, updateKYCStatus } from "@/services/admin";
+import { format } from "date-fns";
 
 export default function KYCPage() {
-    const [documents, setDocuments] = useState(initialStandardDocuments);
+    const [documents, setDocuments] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [processingId, setProcessingId] = useState<string | null>(null);
 
-    const handleStatusChange = (id: number, newStatus: string) => {
-        setDocuments((prev) =>
-            prev.map((doc) => (doc.id === id ? { ...doc, status: newStatus } : doc))
-        );
+    useEffect(() => {
+        loadRequests();
+    }, []);
+
+    const loadRequests = async () => {
+        try {
+            setLoading(true);
+            const data = await getPendingKYCRequests();
+            setDocuments(data || []);
+        } catch (e: any) {
+            console.error(`Failed to load KYC requests: ${e?.message || e}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleStatusChange = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
+        try {
+            setProcessingId(id);
+            // If rejected, usually we'd ask for a reason. For now, we'll just set a default reason.
+            await updateKYCStatus(id, newStatus, newStatus === 'REJECTED' ? "Document verification failed" : undefined);
+
+            // Remove from list or update status
+            setDocuments(prev => prev.filter(d => d.id !== id));
+
+        } catch (error) {
+            console.error("Failed to update status:", error);
+            alert("Failed to update status");
+        } finally {
+            setProcessingId(null);
+        }
     };
 
     return (
@@ -56,77 +58,112 @@ export default function KYCPage() {
                     </div>
                     <div className="bg-[#8B5CF6]/10 px-4 py-2 rounded-lg border border-[#8B5CF6]/20">
                         <span className="text-[#8B5CF6] font-mono font-bold">
-                            PENDING: {documents.filter(d => d.status === 'pending').length}
+                            PENDING: {documents.length}
                         </span>
                     </div>
                 </header>
 
-                <div className="grid gap-6">
-                    {documents.map((doc) => (
-                        <motion.div
-                            key={doc.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="bg-[#0a0a0a] border border-white/10 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 hover:border-[#8B5CF6]/50 transition-colors"
-                        >
-                            <div className="flex items-center gap-4 flex-1">
-                                <img
-                                    src={doc.avatar}
-                                    alt={doc.user}
-                                    className="w-12 h-12 rounded-full object-cover border-2 border-white/10"
-                                />
-                                <div>
-                                    <h3 className="font-bold text-lg text-white">{doc.user}</h3>
-                                    <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
-                                        <span className="flex items-center gap-1 text-[#06B6D4]">
-                                            <FileText size={14} /> {doc.type}
-                                        </span>
-                                        <span>•</span>
-                                        <span>{doc.date}</span>
+                {loading ? (
+                    <div className="flex justify-center py-20">
+                        <Loader2 className="animate-spin text-[#8B5CF6]" size={40} />
+                    </div>
+                ) : documents.length === 0 ? (
+                    <div className="text-center py-20 text-gray-500">
+                        <FileText size={48} className="mx-auto mb-4 opacity-20" />
+                        <p>No pending verification requests.</p>
+                    </div>
+                ) : (
+                    <div className="grid gap-6">
+                        {documents.map((doc) => (
+                            <motion.div
+                                key={doc.id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-[#0a0a0a] border border-white/10 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 hover:border-[#8B5CF6]/50 transition-colors"
+                            >
+                                <div className="flex items-center gap-4 flex-1">
+                                    <div className="w-12 h-12 rounded-full bg-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6] font-bold border-2 border-white/10">
+                                        {doc.full_name?.charAt(0) || <User size={20} />}
                                     </div>
-                                </div>
-                            </div>
-
-                            {/* Document Preview Thumbnail */}
-                            <div className="hidden md:block w-32 h-20 bg-white/5 rounded-lg overflow-hidden relative group cursor-pointer border border-white/10">
-                                <img src={doc.url} alt="Doc Preview" className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50">
-                                    <Eye size={20} className="text-white" />
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-6">
-                                <div className="text-right">
-                                    <div className={`text-xs font-bold uppercase px-3 py-1 rounded-full border ${doc.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                        doc.status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
-                                            'bg-red-500/10 text-red-500 border-red-500/20'
-                                        }`}>
-                                        {doc.status}
+                                    <div>
+                                        <h3 className="font-bold text-lg text-white">{doc.full_name || "Unknown User"}</h3>
+                                        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400 mt-1">
+                                            <span className="flex items-center gap-1 text-[#06B6D4] font-bold">
+                                                <FileText size={14} /> {doc.aadhar_number}
+                                            </span>
+                                            <span>•</span>
+                                            <span className="flex items-center gap-1">
+                                                <Phone size={14} className="opacity-50" /> {doc.phone}
+                                                {doc.secondary_phone && (
+                                                    <span className="text-gray-600 ml-1">/ {doc.secondary_phone}</span>
+                                                )}
+                                            </span>
+                                            <span>•</span>
+                                            <span className="text-[10px]">{doc.kyc_submitted_at ? format(new Date(doc.kyc_submitted_at), 'MMM dd, HH:mm') : 'Recently'}</span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {doc.status === 'pending' && (
+                                {/* Document Previews */}
+                                <div className="flex gap-3">
+                                    {doc.id_card_front_url && (
+                                        <a href={doc.id_card_front_url} target="_blank" rel="noopener noreferrer" className="block w-20 h-14 bg-white/5 rounded-lg overflow-hidden relative group cursor-pointer border border-white/10 hover:border-[#8B5CF6]">
+                                            <img src={doc.id_card_front_url} alt="ID Front" className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50">
+                                                <Eye size={12} className="text-white" />
+                                            </div>
+                                            <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[6px] font-black tracking-tighter text-center text-white p-0.5">FRONT</span>
+                                        </a>
+                                    )}
+                                    {doc.id_card_back_url && (
+                                        <a href={doc.id_card_back_url} target="_blank" rel="noopener noreferrer" className="block w-20 h-14 bg-white/5 rounded-lg overflow-hidden relative group cursor-pointer border border-white/10 hover:border-[#8B5CF6]">
+                                            <img src={doc.id_card_back_url} alt="ID Back" className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50">
+                                                <Eye size={12} className="text-white" />
+                                            </div>
+                                            <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[6px] font-black tracking-tighter text-center text-white p-0.5">BACK</span>
+                                        </a>
+                                    )}
+                                    {doc.selfie_url && (
+                                        <a href={doc.selfie_url} target="_blank" rel="noopener noreferrer" className="block w-16 h-16 bg-white/5 rounded-full overflow-hidden relative group cursor-pointer border border-white/10 hover:border-[#8B5CF6]">
+                                            <img src={doc.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50">
+                                                <Eye size={16} className="text-white" />
+                                            </div>
+                                        </a>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-6">
+                                    <div className="text-right">
+                                        <div className={`text-xs font-bold uppercase px-3 py-1 rounded-full border bg-yellow-500/10 text-yellow-500 border-yellow-500/20`}>
+                                            PENDING
+                                        </div>
+                                    </div>
+
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={() => handleStatusChange(doc.id, 'rejected')}
-                                            className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors border border-transparent hover:border-red-500/50"
+                                            onClick={() => handleStatusChange(doc.id, 'REJECTED')}
+                                            disabled={processingId === doc.id}
+                                            className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors border border-transparent hover:border-red-500/50 disabled:opacity-50"
                                             title="Reject"
                                         >
-                                            <X size={20} />
+                                            {processingId === doc.id ? <Loader2 size={20} className="animate-spin" /> : <X size={20} />}
                                         </button>
                                         <button
-                                            onClick={() => handleStatusChange(doc.id, 'approved')}
-                                            className="p-2 bg-green-500/10 text-green-500 rounded-lg hover:bg-green-500/20 transition-colors border border-transparent hover:border-green-500/50"
+                                            onClick={() => handleStatusChange(doc.id, 'APPROVED')}
+                                            disabled={processingId === doc.id}
+                                            className="p-2 bg-green-500/10 text-green-500 rounded-lg hover:bg-green-500/20 transition-colors border border-transparent hover:border-green-500/50 disabled:opacity-50"
                                             title="Approve"
                                         >
-                                            <Check size={20} />
+                                            {processingId === doc.id ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
                                         </button>
                                     </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

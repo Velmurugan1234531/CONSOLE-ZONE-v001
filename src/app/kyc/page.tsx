@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { useState, useEffect } from "react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import PageHero from "@/components/layout/PageHero";
 import { useVisuals } from "@/context/visuals-context";
+import { createClient } from "@/utils/supabase/client";
 
 export default function KYCPage() {
     const [step, setStep] = useState(1);
@@ -27,10 +29,31 @@ export default function KYCPage() {
     const [address, setAddress] = useState("");
     const [idFile, setIdFile] = useState<File | null>(null);
     const [selfieFile, setSelfieFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     const router = useRouter();
     const supabase = createClient();
     const { settings } = useVisuals();
+
+    const uploadFile = async (file: File, path: string) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${path}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('kyc-documents')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            throw uploadError;
+        }
+
+        const { data } = supabase.storage
+            .from('kyc-documents')
+            .getPublicUrl(filePath);
+
+        return data.publicUrl;
+    };
 
     const detectLocation = () => {
         setIsLocating(true);
@@ -43,13 +66,13 @@ export default function KYCPage() {
                     );
                     const data = await response.json();
                     setAddress(data.display_name);
-                } catch (error) {
-                    console.error("Error fetching address:", error);
+                } catch (error: any) {
+                    console.error(`Error fetching address: ${error?.message || error}`);
                 } finally {
                     setIsLocating(false);
                 }
-            }, (error) => {
-                console.error("Error getting location:", error);
+            }, (error: any) => {
+                console.error(`Error getting location: ${error?.message || error}`);
                 setIsLocating(false);
             });
         } else {
@@ -70,12 +93,73 @@ export default function KYCPage() {
             return;
         }
 
+        if (!idFile || !selfieFile) {
+            alert("Please upload both ID and Selfie documents.");
+            return;
+        }
+
         setIsSubmitting(true);
-        // Simulate API call or handle Supabase submission
-        setTimeout(() => {
-            setIsSubmitting(false);
+        setUploading(true);
+
+        try {
+            const user = auth.currentUser;
+
+            if (!user) {
+                // Check Demo Session
+                const demoUser = localStorage.getItem('DEMO_USER_SESSION');
+                if (demoUser) {
+                    const parsed = JSON.parse(demoUser);
+                    // Use demo user ID
+                    const idUrl = await uploadFile(idFile, `${parsed.id}/id_card`);
+                    const selfieUrl = await uploadFile(selfieFile, `${parsed.id}/selfie`);
+
+                    // Submit Data
+                    const { submitKYC } = await import("@/services/admin");
+                    await submitKYC(parsed.id, {
+                        fullName,
+                        phone,
+                        secondaryPhone,
+                        aadharNumber,
+                        address,
+                        idCardFrontUrl: idUrl,
+                        selfieUrl
+                    });
+
+                    router.push("/profile");
+                    return;
+                }
+                alert("Please log in to submit KYC.");
+                router.push('/login');
+                return;
+            }
+
+            // Upload Files
+            const idUrl = await uploadFile(idFile, `${user.uid}/id_card`);
+            const selfieUrl = await uploadFile(selfieFile, `${user.uid}/selfie`);
+
+            // Submit Data
+            const { submitKYC } = await import("@/services/admin");
+            await submitKYC(user.uid, {
+                fullName,
+                phone,
+                secondaryPhone,
+                aadharNumber,
+                address,
+                idCardFrontUrl: idUrl,
+                selfieUrl
+            });
+
+            // Success Feedback
+            // Redirect to Profile
             router.push("/profile");
-        }, 2000);
+
+        } catch (error: any) {
+            console.error(`KYC Submission Failed: ${error?.message || error}`);
+            alert(`Submission Failed: ${error.message || "Unknown error"}`);
+        } finally {
+            setIsSubmitting(false);
+            setUploading(false);
+        }
     };
 
     return (

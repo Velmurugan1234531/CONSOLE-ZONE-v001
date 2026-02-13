@@ -17,7 +17,8 @@ import {
 import { getNotifications, markAsRead, markAllAsRead, deleteNotification } from "@/services/notifications";
 import { Notification, NotificationType } from "@/types";
 import { formatDistanceToNow } from "date-fns";
-import { createClient } from "@/utils/supabase/client";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function NotificationsPage() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -25,17 +26,22 @@ export default function NotificationsPage() {
     const [userId, setUserId] = useState<string | null>(null);
 
     useEffect(() => {
-        const getSession = async () => {
-            const supabase = createClient();
-            const { data } = await supabase.auth.getSession();
-            if (data.session?.user.id) {
-                setUserId(data.session.user.id);
-                loadNotifications(data.session.user.id);
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+                setUserId(firebaseUser.uid);
+                loadNotifications(firebaseUser.uid);
             } else {
-                setLoading(false);
+                const demoUser = localStorage.getItem('DEMO_USER_SESSION');
+                if (demoUser) {
+                    const uid = JSON.parse(demoUser).id;
+                    setUserId(uid);
+                    loadNotifications(uid);
+                } else {
+                    setLoading(false);
+                }
             }
-        };
-        getSession();
+        });
+        return () => unsubscribe();
     }, []);
 
     const loadNotifications = async (uid?: string) => {
@@ -43,6 +49,8 @@ export default function NotificationsPage() {
         try {
             const data = await getNotifications(uid || userId || undefined);
             setNotifications(data);
+        } catch (error) {
+            console.error("NotificationsPage: loadNotifications failed:", error);
         } finally {
             setLoading(false);
         }

@@ -18,7 +18,7 @@ export const checkRentalEligibility = async (deviceId: string): Promise<RentalEl
         .single();
 
     if (error || !device) {
-        console.error("Error fetching device for eligibility check:", error);
+        console.error(`Error fetching device for eligibility check: ${error?.message || error}`);
         return { allowed: false, reason: "Device not found or system error." };
     }
 

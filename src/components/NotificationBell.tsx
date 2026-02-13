@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getNotifications, getUnreadCount, markAsRead, deleteNotification } from "@/services/notifications";
 import { Notification, NotificationType } from "@/types";
 import { formatDistanceToNow } from "date-fns";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
@@ -18,15 +20,23 @@ export default function NotificationBell() {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const fetchUser = async () => {
-            const supabase = createClient();
-            const { data } = await supabase.auth.getSession();
-            if (data.session?.user.id) {
-                setUserId(data.session.user.id);
-                updateCounts(data.session.user.id);
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+                setUserId(firebaseUser.uid);
+                updateCounts(firebaseUser.uid);
+            } else {
+                const demoUser = localStorage.getItem('DEMO_USER_SESSION');
+                if (demoUser) {
+                    const uid = JSON.parse(demoUser).id;
+                    setUserId(uid);
+                    updateCounts(uid);
+                } else {
+                    setUserId(null);
+                    setUnreadCount(0);
+                    setNotifications([]);
+                }
             }
-        };
-        fetchUser();
+        });
 
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -34,7 +44,10 @@ export default function NotificationBell() {
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        return () => {
+            unsubscribe();
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
     }, []);
 
     const updateCounts = async (uid: string) => {

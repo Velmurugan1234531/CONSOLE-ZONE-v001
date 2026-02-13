@@ -13,6 +13,10 @@ export interface SiteSettings {
     maintenanceMode: boolean;
     announcement: string;
     seo: Record<string, PageSEO>;
+    securityDeposit: number;
+    taxRate: number;
+    minRentalDays: number;
+    freeDeliveryThreshold: number;
 }
 
 const STORAGE_KEY = 'site_settings';
@@ -24,6 +28,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
     holidayMode: false,
     maintenanceMode: false,
     announcement: "",
+    securityDeposit: 2000,
+    taxRate: 18,
+    minRentalDays: 3,
+    freeDeliveryThreshold: 5000,
     seo: {
         'home': {
             title: "Console Zone | Rent PS5, Xbox & Gaming Gear",
@@ -82,12 +90,7 @@ export const fetchSiteSettings = async (): Promise<SiteSettings> => {
             } else if (error.code === '42P01') {
                 console.error("Table site_settings does not exist in Supabase! Please run the migration: supabase/migrations/20240210_create_site_settings.sql");
             } else {
-                console.error("Supabase settings fetch error:", {
-                    message: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    code: error.code
-                });
+                console.error(`Supabase settings fetch error: ${error.message || error} (Code: ${error.code || 'None'})`);
             }
         }
     } catch (e: any) {

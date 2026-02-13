@@ -23,7 +23,7 @@ export const BookingLogic = {
             .eq('status', 'ACTIVE');
 
         if (consoleError || !consoles || consoles.length === 0) {
-            console.error("Error fetching consoles:", consoleError);
+            console.error(`Error fetching consoles: ${consoleError?.message || consoleError}`);
             return null;
         }
 
@@ -39,7 +39,7 @@ export const BookingLogic = {
                 .gt('end_date', startTime.toISOString());
 
             if (overlapError) {
-                console.error(`Error checking overlap for console ${consoleItem.console_id}:`, overlapError);
+                console.error(`Error checking overlap for console ${consoleItem.console_id}: ${overlapError.message || overlapError}`);
                 continue;
             }
 
@@ -131,20 +131,24 @@ export const BookingLogic = {
     /**
      * Validate current user constraints for booking
      */
-    async validateUserConstraints(userId: number) {
+    async validateUserConstraints(userId: string) {
         const supabase = await createClient();
 
         const { data: user, error } = await supabase
             .from('users')
-            .select('kyc_verified, total_bookings')
-            .eq('user_id', userId)
+            .select('kyc_status, total_bookings')
+            .eq('id', userId)
             .single();
 
-        if (error || !user) throw new Error("User validation failed");
+        if (error || !user) {
+            console.error(`User validation failed for ${userId}: ${error?.message || error}`);
+            throw new Error("User validation failed");
+        }
 
         return {
-            canPickup: user.total_bookings > 0 && user.kyc_verified,
-            isFirstTime: user.total_bookings === 0
+            isVerified: user.kyc_status === 'APPROVED',
+            canPickup: (user.total_bookings || 0) > 0 && user.kyc_status === 'APPROVED',
+            isFirstTime: (user.total_bookings || 0) === 0
         };
     }
 };

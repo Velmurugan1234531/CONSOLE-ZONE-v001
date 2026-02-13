@@ -2,7 +2,7 @@
 // Rebuild trigger: 2
 
 import Link from "next/link";
-import { LayoutDashboard, Users, Box, QrCode, FileCheck, FileText, LogOut, TrendingUp, Monitor, Gamepad2, Image, ShoppingBag, Tag, Wrench, History as HistoryIcon, Settings, Zap, Bell, DollarSign, Percent, Cpu } from "lucide-react";
+import { LayoutDashboard, Users, Box, QrCode, FileCheck, FileText, LogOut, TrendingUp, Monitor, Gamepad2, Image, ShoppingBag, Tag, Wrench, History as HistoryIcon, Settings, Zap, Bell, DollarSign, Percent, Cpu, ShieldCheck } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { TopNav } from "@/components/admin/TopNav";
@@ -103,6 +103,7 @@ export default function AdminLayout({
                                 <div className="space-y-1">
                                     {[
                                         { href: "/admin/users", icon: <Users size={20} />, label: "Users" },
+                                        { href: "/admin/kyc", icon: <ShieldCheck size={20} />, label: "Identity Hub" },
                                         { href: "/admin/maintenance", icon: <Wrench size={20} />, label: "Maintenance & QC" },
                                         { href: "/admin/qr", icon: <QrCode size={20} />, label: "Scanner" },
                                         { href: "/admin/notifications", icon: <Bell size={20} />, label: "Comms Hub" },

@@ -44,6 +44,8 @@ export default function AdminNotificationsPage() {
         try {
             const data = await getNotifications();
             setNotifications(data);
+        } catch (error) {
+            console.error("AdminNotificationsPage: loadNotifications failed:", error);
         } finally {
             setLoading(false);
         }

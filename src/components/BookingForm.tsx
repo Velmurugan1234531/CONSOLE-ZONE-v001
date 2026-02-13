@@ -15,6 +15,8 @@ import { DateRange } from "react-day-picker";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { createClient } from "@/utils/supabase/client";
 
 function cn(...inputs: ClassValue[]) {
@@ -78,6 +80,7 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
     }, {} as Record<string, { total: number; rented: number; label: string; category: string }>);
 
     const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS>((initialPlan as keyof typeof PLANS) || 'DAILY');
+    const [kycStatus, setKycStatus] = useState<string | null>(null);
     const [date, setDate] = useState<DateRange | undefined>({
         from: new Date(),
         to: new Date(new Date().getTime() + 24 * 60 * 60 * 1000 * 2), // 2 days default
@@ -113,8 +116,8 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
             try {
                 const settings = await getCatalogSettings();
                 setCatalogSettings(settings);
-            } catch (error) {
-                console.error("Failed to load catalog settings:", error);
+            } catch (error: any) {
+                console.error(`Failed to load catalog settings: ${error?.message || error}`);
             }
         };
         loadCatalog();
@@ -122,19 +125,57 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
 
     // Track Auth State
     useEffect(() => {
-        const getUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                setUser(session.user);
-                setFormData(prev => ({
-                    ...prev,
-                    firstName: session.user.user_metadata?.full_name?.split(' ')[0] || "",
-                    lastName: session.user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || "",
-                    email: session.user.email || ""
-                }));
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            try {
+                if (firebaseUser) {
+                    const currentUser = {
+                        ...firebaseUser,
+                        id: firebaseUser.uid,
+                        user_metadata: {
+                            full_name: firebaseUser.displayName,
+                            avatar_url: firebaseUser.photoURL
+                        },
+                        email: firebaseUser.email
+                    };
+                    setUser(currentUser);
+
+                    // Fetch KYC Status from users table
+                    // We keep using Supabase for this, but with the Firebase UID
+                    const { data: userData } = await supabase
+                        .from('users')
+                        .select('kyc_status')
+                        .eq('id', firebaseUser.uid)
+                        .single();
+
+                    if (userData) {
+                        setKycStatus(userData.kyc_status);
+                    }
+
+                    setFormData(prev => ({
+                        ...prev,
+                        firstName: firebaseUser.displayName?.split(' ')[0] || "",
+                        lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || "",
+                        email: firebaseUser.email || ""
+                    }));
+                } else {
+                    const demoUser = localStorage.getItem('DEMO_USER_SESSION');
+                    if (demoUser) {
+                        const parsed = JSON.parse(demoUser);
+                        setUser(parsed);
+                        setFormData(prev => ({
+                            ...prev,
+                            firstName: parsed.user_metadata?.full_name?.split(' ')[0] || "",
+                            lastName: parsed.user_metadata?.full_name?.split(' ').slice(1).join(' ') || "",
+                            email: parsed.email || ""
+                        }));
+                    }
+                }
+            } catch (e: any) {
+                console.error(`BookingForm: Auth session fetch failure: ${e?.message || e}`);
             }
-        };
-        getUser();
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const [isScriptLoaded, setIsScriptLoaded] = useState(false);
@@ -307,14 +348,14 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
                                 address: `${data.locality || ''} ${data.city || ''}, ${data.principalSubdivision || ''}`.trim()
                             }));
                         }
-                    } catch (e) {
-                        console.error("Geocoding failed", e);
+                    } catch (e: any) {
+                        console.error(`Geocoding failed: ${e?.message || e}`);
                         setValidationError("Could not detect location automatically.");
                     }
                     setIsLocating(false);
                 },
-                (error) => {
-                    console.error("Error getting location", error);
+                (error: any) => {
+                    console.error(`Error getting location: ${error?.message || error}`);
                     setIsLocating(false);
                     setValidationError("Could not detect location. Please enter manually.");
                 }
@@ -398,7 +439,7 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error("Booking API Failed:", errorData);
+                console.error(`Booking API Failed: ${errorData?.message || JSON.stringify(errorData)}`);
                 // Fallback to local storage if API fails (or show error)
                 // For safety/demo we'll still save locally but warn
             }
@@ -416,8 +457,8 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
             const existingBookings = JSON.parse(localStorage.getItem('console-zone-bookings') || '[]');
             localStorage.setItem('console-zone-bookings', JSON.stringify([...existingBookings, newBooking]));
 
-        } catch (error) {
-            console.error('Failed to save booking', error);
+        } catch (error: any) {
+            console.error(`Failed to save booking: ${error?.message || error}`);
         }
 
         setIsSubmitting(false);
@@ -430,18 +471,31 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
 
         try {
             // 1. Create Order via API
+            console.log("Creating order with amount:", amount.total);
             const response = await fetch("/api/checkout", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ amount }),
+                body: JSON.stringify({ amount: amount.total }),
             });
             const orderData = await response.json();
 
-            if (orderData.error) {
-                console.error("Payment API Error:", orderData.error);
-                // Fallback for demo/no-keys: still finalize booking but warn
-                setValidationError("Payment Gateway Error (Check Console/Keys). proceeding with demo booking.");
-                await new Promise(resolve => setTimeout(resolve, 2000));
+            if (orderData.error || orderData.demoMode) {
+                const isAuthError = response.status === 401 || orderData.demoMode ||
+                    (typeof orderData.error === 'string' && orderData.error.includes("Invalid Razorpay Credentials"));
+
+                if (isAuthError) {
+                    console.warn(`Payment Demo Mode: ${orderData.error}`);
+                } else {
+                    console.error(`Payment API Error: ${orderData.error?.message || orderData.error}`);
+                }
+
+                if (isAuthError) {
+                    setValidationError("⚠️ Demo Mode: Simulating Payment (Invalid Keys)");
+                } else {
+                    setValidationError(`Payment Error: ${orderData.error.message || orderData.error}. Falling back to Demo.`);
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 1500));
                 finalizeBooking();
                 return;
             }
@@ -471,8 +525,8 @@ export default function BookingForm({ product, initialPlan = 'DAILY' }: BookingF
             rzp.open();
             setIsSubmitting(false); // Wait for user action in modal
 
-        } catch (error) {
-            console.error("Payment Error:", error);
+        } catch (error: any) {
+            console.error(`Payment Error: ${error?.message || error}`);
             setIsSubmitting(false);
             setValidationError("Payment failed initialization. Please try again.");
         }

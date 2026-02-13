@@ -1,6 +1,8 @@
 export interface MarketplaceSettings {
     tradeInRate: number; // Percentage of shelf price paid in cash (e.g., 0.4)
     creditBonus: number; // Percentage bonus for store credit (e.g., 0.2)
+    tradeInFee: number;
+    enableTradeIn: boolean;
     payoutTiers: {
         credit: number; // hours
         bank: number; // hours
@@ -11,6 +13,8 @@ export interface MarketplaceSettings {
 const DEFAULT_SETTINGS: MarketplaceSettings = {
     tradeInRate: 0.4,
     creditBonus: 0.2,
+    tradeInFee: 5,
+    enableTradeIn: true,
     payoutTiers: {
         credit: 12,
         bank: 24,

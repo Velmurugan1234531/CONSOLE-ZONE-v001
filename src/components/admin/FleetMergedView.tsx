@@ -24,10 +24,13 @@ export function FleetMergedView({ devices, onSelectModel, onEditCategory }: Flee
         }> = {};
 
         devices.forEach(d => {
-            if (!groups[d.model]) {
-                groups[d.model] = {
-                    model: d.model,
-                    category: d.category,
+            const modelKey = d.model || 'Unknown Model';
+            const categoryKey = d.category || 'Uncategorized';
+
+            if (!groups[modelKey]) {
+                groups[modelKey] = {
+                    model: modelKey,
+                    category: categoryKey,
                     total: 0,
                     ready: 0,
                     rented: 0,
@@ -37,10 +40,10 @@ export function FleetMergedView({ devices, onSelectModel, onEditCategory }: Flee
                     devices: []
                 };
             }
-            const g = groups[d.model];
+            const g = groups[modelKey];
             g.total++;
             g.devices.push(d);
-            g.healthAvg += d.health;
+            g.healthAvg += d.health || 0;
 
             if (d.status === 'Ready') g.ready++;
             else if (d.status === 'Rented') g.rented++;
@@ -50,7 +53,7 @@ export function FleetMergedView({ devices, onSelectModel, onEditCategory }: Flee
 
         return Object.values(groups).map(g => ({
             ...g,
-            healthAvg: Math.round(g.healthAvg / g.total)
+            healthAvg: g.total > 0 ? Math.round(g.healthAvg / g.total) : 0
         })).sort((a, b) => b.total - a.total);
     }, [devices]);
 

@@ -177,7 +177,7 @@ export const updateCatalogSettings = async (
         .single();
 
     if (error) {
-        console.error("Error updating catalog settings:", error);
+        console.error(`Error updating catalog settings: ${error.message || error}`);
         throw error;
     }
 
@@ -210,7 +210,7 @@ export const createCatalogSettings = async (
         .single();
 
     if (error) {
-        console.error("Error creating catalog settings:", error);
+        console.error(`Error creating catalog settings: ${error.message || error}`);
         throw error;
     }
 
@@ -242,7 +242,7 @@ export const deleteCatalogSettings = async (category: string): Promise<boolean> 
         .eq('device_category', category);
 
     if (error) {
-        console.error("Error deleting catalog settings:", error);
+        console.error(`Error deleting catalog settings: ${error.message || error}`);
         throw error;
     }
 
@@ -291,8 +291,8 @@ export const renameCategory = async (
         if (deviceError) throw deviceError;
 
         return true;
-    } catch (e) {
-        console.error("Renaming flow failure:", e);
+    } catch (e: any) {
+        console.error(`Renaming flow failure: ${e?.message || e}`);
         throw e;
     }
 };
@@ -318,8 +318,8 @@ export const calculateRentalPrice = async (
 
     try {
         settings = await getCatalogSettingsByCategory(category);
-    } catch (error) {
-        console.error("Failed to fetch settings for calculation, falling back to demo:", error);
+    } catch (error: any) {
+        console.error(`Failed to fetch settings for calculation, falling back to demo: ${error?.message || error}`);
     }
 
     // Fallback to demo if real-time fails or returned null

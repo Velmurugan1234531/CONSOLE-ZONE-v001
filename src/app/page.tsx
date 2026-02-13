@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { VisualsService, VisualSettings } from "@/services/visuals";
 import { BuilderRenderer } from "@/components/Builder/BuilderRenderer";
 import Link from "next/link";
@@ -12,16 +12,59 @@ import { BackgroundSlideshow } from "@/components/ui/BackgroundSlideshow";
 
 import { getProducts, Product } from "@/services/products";
 import PageHero from "@/components/layout/PageHero";
+import MissionTracker from "@/components/dashboard/MissionTracker";
+import { getUserRentals } from "@/services/rentals";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { createClient } from "@/utils/supabase/client";
 
 export default function Home() {
     const { addItem } = useCart();
     const [visualSettings, setVisualSettings] = useState<VisualSettings | null>(null);
     const [buyProducts, setBuyProducts] = useState<Product[]>([]);
     const [rentProducts, setRentProducts] = useState<Product[]>([]);
+    const [missions, setMissions] = useState<any[]>([]);
     const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+    const [user, setUser] = useState<any>(null);
     usePageSEO('home');
 
     useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+                setUser(firebaseUser);
+                loadMissions(firebaseUser.uid);
+            } else {
+                const demoUser = localStorage.getItem('DEMO_USER_SESSION');
+                if (demoUser) {
+                    const parsed = JSON.parse(demoUser);
+                    setUser(parsed);
+                    loadMissions(parsed.id);
+                } else {
+                    setUser(null);
+                    setMissions([]);
+                }
+            }
+        });
+
+        const loadMissions = async (userId: string) => {
+            try {
+                const data = await getUserRentals(userId);
+                // Map to mission format
+                const activeMissions = data
+                    .filter(r => r.status === 'active' || r.status === 'shipped' || r.status === 'overdue')
+                    .map(r => ({
+                        id: r.id,
+                        item_name: r.product?.name || "Gaming Gear",
+                        return_date: r.end_date,
+                        status: r.status as any,
+                        image_url: (r.product as any)?.image || (r.product as any)?.images?.[0] || "https://images.unsplash.com/photo-1605898960710-9aa6f496395b?q=80&w=300"
+                    }));
+                setMissions(activeMissions);
+            } catch (err) {
+                console.error("Failed to load missions:", err);
+            }
+        };
+
         const load = async () => {
             const settings = await VisualsService.getSettings();
             setVisualSettings(settings);
@@ -33,13 +76,14 @@ export default function Home() {
                 ]);
                 setBuyProducts(buyData.slice(0, 3)); // Limit to featured
                 setRentProducts(rentData.slice(0, 3)); // Limit to featured
-            } catch (error) {
-                console.error("Error loading products for home page:", error);
+            } catch (error: any) {
+                console.error(`Error loading products for home page: ${error?.message || error}`);
             } finally {
                 setIsLoadingProducts(false);
             }
         };
         load();
+        return () => unsubscribe();
     }, []);
 
     const content = visualSettings?.pageContent || {
@@ -80,6 +124,21 @@ export default function Home() {
                 )}
             </PageHero>
 
+            {/* Tactical Mission Overwatch Overlay (Conditional) */}
+            <AnimatePresence>
+                {missions.length > 0 && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 50 }}
+                        className="relative z-20 px-4 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto -mt-32 mb-24"
+                    >
+                        <div className="bg-black/60 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-8 md:p-12 shadow-2xl">
+                            <MissionTracker missions={missions} />
+                        </div>
+                    </motion.section>
+                )}
+            </AnimatePresence>
 
             {/* Flash Sale Banner */}
             <section className="px-4 sm:px-6 lg:px-8 w-full max-w-none mx-auto mb-24">

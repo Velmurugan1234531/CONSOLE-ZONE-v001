@@ -16,6 +16,7 @@ export interface Profile {
     phone?: string;
     kyc_status: KYCStatus;
     wallet_balance: number;
+    neural_sync_xp: number;
     created_at: string;
 }
 

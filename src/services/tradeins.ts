@@ -21,7 +21,7 @@ export const getTradeInRequests = async (): Promise<TradeInRequest[]> => {
         .from('trade_in_requests')
         .select(`
             *,
-            user:profiles(full_name)
+            user:users(full_name)
         `)
         .order('created_at', { ascending: false });
 

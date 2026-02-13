@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { auth } from "@/lib/firebase";
+import {
+    createUserWithEmailAndPassword,
+    updateProfile,
+    signInWithPopup,
+    GoogleAuthProvider,
+    OAuthProvider
+} from "firebase/auth";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -17,30 +24,25 @@ export default function SignupPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const router = useRouter();
-    const supabase = createClient();
     const { settings } = useVisuals();
-
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
-        const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    full_name: fullName,
-                },
-                emailRedirectTo: `${window.location.origin}/auth/callback`,
-            },
-        });
-
-        if (error) {
-            setError(error.message);
-            setLoading(false);
-        } else {
+        try {
+            const { user } = await createUserWithEmailAndPassword(auth, email, password);
+            if (user) {
+                await updateProfile(user, {
+                    displayName: fullName
+                });
+                // Set session cookie for middleware
+                document.cookie = `firebase-session=${user.uid}; path=/; max-age=3600; SameSite=Lax`;
+            }
             setSuccess(true);
+            setLoading(false);
+        } catch (err: any) {
+            setError(err.message || "Signup failed. Please try again.");
             setLoading(false);
         }
     };
@@ -49,15 +51,15 @@ export default function SignupPage() {
         setLoading(true);
         setError(null);
 
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-            },
-        });
-
-        if (error) {
-            setError(error.message);
+        const provider = new GoogleAuthProvider();
+        try {
+            const { user } = await signInWithPopup(auth, provider);
+            // Set session cookie for middleware
+            document.cookie = `firebase-session=${user.uid}; path=/; max-age=3600; SameSite=Lax`;
+            router.push("/");
+            router.refresh();
+        } catch (err: any) {
+            setError(err.message || "Google registration failed.");
             setLoading(false);
         }
     };
@@ -66,15 +68,15 @@ export default function SignupPage() {
         setLoading(true);
         setError(null);
 
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "apple",
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-            },
-        });
-
-        if (error) {
-            setError(error.message);
+        const provider = new OAuthProvider("apple.com");
+        try {
+            const { user } = await signInWithPopup(auth, provider);
+            // Set session cookie for middleware
+            document.cookie = `firebase-session=${user.uid}; path=/; max-age=3600; SameSite=Lax`;
+            router.push("/");
+            router.refresh();
+        } catch (err: any) {
+            setError(err.message || "Apple authentication failed.");
             setLoading(false);
         }
     };

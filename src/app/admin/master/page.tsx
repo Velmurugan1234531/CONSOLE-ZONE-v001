@@ -34,7 +34,10 @@ import {
     CheckCircle2,
     AlertCircle,
     Monitor,
-    CreditCard
+    CreditCard,
+    Crosshair,
+    Fingerprint,
+    Users
 } from "lucide-react";
 import { getMarketplaceSettings, saveMarketplaceSettings, resetMarketplaceSettings, type MarketplaceSettings } from '@/services/marketplace-settings';
 import { getSiteSettings, saveSiteSettings, resetSiteSettings, fetchSiteSettings, type SiteSettings } from '@/services/site-settings';
@@ -43,6 +46,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getAllDevices, getSystemMetrics, getFleetAnalytics, getRevenueAnalytics } from "@/services/admin";
 import { Device } from "@/types";
 import { NexusTerminal } from "@/components/admin/NexusTerminal";
+import { RentalCommandNexus } from "@/components/admin/master/RentalCommandNexus";
+import { KYCCommandNexus } from "@/components/admin/master/KYCCommandNexus";
+import { getKYCStats } from "@/services/admin";
+import { SystemPulse } from "@/components/admin/SystemPulse";
+import { CommandNexusCard } from "@/components/admin/CommandNexusCard";
+import { FleetCommandNexus } from "@/components/admin/master/FleetCommandNexus";
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, BarChart, Bar
@@ -71,28 +80,36 @@ export default function MasterControlPage() {
     const [isTerminalOpen, setIsTerminalOpen] = useState(true);
     const [fleetAnalytics, setFleetAnalytics] = useState<any>(null);
     const [revenueData, setRevenueData] = useState<any[]>([]);
+    const [kycStats, setKycStats] = useState({ pending: 0, approvalRate: 0 });
 
     useEffect(() => {
         const load = async () => {
             try {
-                const [settings, allDevices, metrics, fleetStats, revenue] = await Promise.all([
-                    fetchSiteSettings(),
-                    getAllDevices(),
-                    getSystemMetrics(),
-                    getFleetAnalytics(),
-                    getRevenueAnalytics(7)
+                // Fetch all data with individual fallback protection
+                const [settings, allDevices, metrics, fleetStats, revenue, kStats] = await Promise.all([
+                    fetchSiteSettings().catch(e => (console.error("Dashboard: fetchSiteSettings failed", e), null)),
+                    getAllDevices().catch(e => (console.error("Dashboard: getAllDevices failed", e), [])),
+                    getSystemMetrics().catch(e => (console.error("Dashboard: getSystemMetrics failed", e), null)),
+                    getFleetAnalytics().catch(e => (console.error("Dashboard: getFleetAnalytics failed", e), null)),
+                    getRevenueAnalytics(7).catch(e => (console.error("Dashboard: getRevenueAnalytics failed", e), { total: 0, growth: 0, data: [] })),
+                    getKYCStats().catch(e => (console.error("Dashboard: getKYCStats failed", e), { pending: 0, approved: 0, rejected: 0, approvalRate: 0 }))
                 ]);
-                setSiteSettings(settings);
-                setDevices(allDevices);
-                setSystemMetrics(metrics);
-                setFleetAnalytics(fleetStats);
-                setRevenueData(revenue.data);
 
-                // Calculate average health
-                if (allDevices.length > 0) {
-                    const avg = allDevices.reduce((acc: number, d: Device) => acc + (d.health || 0), 0) / allDevices.length;
-                    setFleetHealth(Math.round(avg));
+                if (kStats) setKycStats(kStats);
+                if (settings) setSiteSettings(settings);
+                if (allDevices) {
+                    setDevices(allDevices);
+                    // Calculate average health
+                    if (allDevices.length > 0) {
+                        const avg = allDevices.reduce((acc: number, d: Device) => acc + (d.health || 0), 0) / allDevices.length;
+                        setFleetHealth(Math.round(avg));
+                    }
                 }
+                if (metrics) setSystemMetrics(metrics);
+                if (fleetStats) setFleetAnalytics(fleetStats);
+                if (revenue) setRevenueData(revenue.data || []);
+            } catch (error) {
+                console.error("Critical dashboard load failure:", error);
             } finally {
                 setIsLoadingSettings(false);
             }
@@ -176,6 +193,12 @@ export default function MasterControlPage() {
                                     active={true}
                                     color="purple"
                                 />
+                                <HUDIndicator
+                                    label="Identity Pulse"
+                                    value={`${kycStats.pending} PENDING`}
+                                    active={kycStats.pending > 0}
+                                    color={kycStats.pending > 10 ? "red" : "purple"}
+                                />
                             </div>
                         </div>
 
@@ -222,20 +245,28 @@ export default function MasterControlPage() {
                     <NavTab id="transmission" icon={Radio} label="Transmission" active={activeTab} onClick={setActiveTab} />
                     <NavTab id="optimization" icon={Shield} label="Optimization" active={activeTab} onClick={setActiveTab} />
                     <NavTab id="nexus" icon={Terminal} label="System Nexus" active={activeTab} onClick={setActiveTab} />
+                    <NavTab id="rental-nexus" icon={Crosshair} label="RENTAL CMDR" active={activeTab} onClick={setActiveTab} />
+                    <NavTab id="global-ops" icon={Globe} label="Global Ops" active={activeTab} onClick={setActiveTab} />
                     <NavTab id="commerce" icon={DollarSign} label="Commerce Hub" active={activeTab} onClick={setActiveTab} />
                     <NavTab id="marketplace" icon={Tag} label="Trade-In Matrix" active={activeTab} onClick={setActiveTab} />
                     <NavTab id="security" icon={Lock} label="Admin Security" active={activeTab} onClick={setActiveTab} />
+                    <NavTab id="identity" icon={Fingerprint} label="Identity Hub" active={activeTab} onClick={setActiveTab} />
                 </nav>
 
                 <main className="flex-1 w-full min-h-[600px]">
                     <AnimatePresence mode="wait">
                         {/* SYSTEM & LAUNCH CONTROL */}
                         {activeTab === 'system' && (
-                            <motion.div key="system" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
+                            <motion.div key="system" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8 pb-20">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     <div className="lg:col-span-2">
-                                        <MasterSection title="Launch Momentum" description="Analytical trajectory of rental transmissions and revenue." icon={<Zap size={24} className="text-yellow-400" />}>
-                                            <div className="h-[300px] w-full mt-6 bg-white/5 rounded-3xl p-6 border border-white/5">
+                                        <CommandNexusCard
+                                            title="Neural Momentum"
+                                            subtitle="Analytical trajectory of system transmissions"
+                                            icon={Zap}
+                                            statusColor="purple"
+                                        >
+                                            <div className="h-[300px] w-full mt-6 bg-white/5 rounded-3xl p-6 border border-white/5 backdrop-blur-sm">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <AreaChart data={revenueData}>
                                                         <defs>
@@ -255,11 +286,16 @@ export default function MasterControlPage() {
                                                     </AreaChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                        </MasterSection>
+                                        </CommandNexusCard>
                                     </div>
-                                    <div>
-                                        <MasterSection title="Fleet Integrity" description="Health distribution across units." icon={<Shield size={24} className="text-emerald-400" />}>
-                                            <div className="h-[300px] w-full flex items-center justify-center relative">
+                                    <div className="flex flex-col gap-8">
+                                        <CommandNexusCard
+                                            title="Fleet Health"
+                                            subtitle="Neural integrity distribution"
+                                            icon={Shield}
+                                            statusColor="emerald"
+                                        >
+                                            <div className="h-[200px] w-full flex items-center justify-center relative">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <PieChart>
                                                         <Pie
@@ -283,75 +319,83 @@ export default function MasterControlPage() {
                                                 </ResponsiveContainer>
                                                 <div className="absolute flex flex-col items-center justify-center">
                                                     <span className="text-2xl font-black text-white">{fleetHealth}%</span>
-                                                    <span className="text-[8px] text-gray-500 uppercase font-black">Avg Health</span>
+                                                    <span className="text-[8px] text-gray-500 uppercase font-black">Avg Sync</span>
                                                 </div>
                                             </div>
-                                        </MasterSection>
+                                        </CommandNexusCard>
+
+                                        <CommandNexusCard
+                                            title="Neural Pulse"
+                                            subtitle="Real-time predictive stability"
+                                            icon={Activity}
+                                            statusColor="blue"
+                                        >
+                                            <div className="space-y-4 pt-4">
+                                                <MetricBar label="Stability Index" value={systemMetrics?.neural?.healthScore || 98} max={100} unit="%" />
+                                                <MetricBar label="Predictive Sync" value={(systemMetrics?.neural?.predictiveAccuracy || 0.94) * 100} max={100} unit="%" />
+                                            </div>
+                                        </CommandNexusCard>
                                     </div>
                                 </div>
-                                <MasterSection title="Site Availability" description="Manage global accessibility states and public visibility." icon={<Zap size={24} className="text-orange-400" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <ProtocolToggle
-                                            title="Maintenance Protocol"
-                                            description="Locks the entire storefront for maintenance. Public users will see a system-down message."
-                                            active={siteSettings.maintenanceMode}
-                                            onToggle={() => setSiteSettings({ ...siteSettings, maintenanceMode: !siteSettings.maintenanceMode })}
-                                            color="red"
-                                        />
-                                        <ProtocolToggle
-                                            title="Holiday Protocol"
-                                            description="Pauses all new rental transmissions. Existing rentals remain unaffected but discovery is locked."
-                                            active={siteSettings.holidayMode}
-                                            onToggle={() => setSiteSettings({ ...siteSettings, holidayMode: !siteSettings.holidayMode })}
-                                            color="orange"
-                                        />
-                                    </div>
-                                </MasterSection>
 
-                                <MasterSection title="Advanced Protocols" description="Bulk system overrides and global broadcasts." icon={<Terminal size={24} className="text-red-400" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <button
-                                            onClick={() => alert('TRANSMITTING: Alpha Alert Broadcast initiated across all nodes.')}
-                                            className="p-6 bg-red-500/5 border border-red-500/20 rounded-3xl hover:bg-red-500/10 transition-all text-left flex items-start gap-4 group"
-                                        >
-                                            <div className="p-3 bg-red-500/10 rounded-xl text-red-500 group-hover:scale-110 transition-transform">
-                                                <Megaphone size={20} />
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-xs font-black uppercase text-red-500">Alpha Alert Broadcast</span>
-                                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">Immediate high-priority message to all active users.</span>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => alert('EXECUTING: Global Fleet Sync. Core integrity verified.')}
-                                            className="p-6 bg-[#3B82F6]/5 border border-[#3B82F6]/20 rounded-3xl hover:bg-[#3B82F6]/10 transition-all text-left flex items-start gap-4 group"
-                                        >
-                                            <div className="p-3 bg-[#3B82F6]/10 rounded-xl text-[#3B82F6] group-hover:scale-110 transition-transform">
-                                                <RefreshCw size={20} />
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-xs font-black uppercase text-[#3B82F6]">Global Fleet Sync</span>
-                                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">Force synchronize all hardware unit telemetry.</span>
-                                            </div>
-                                        </button>
-                                    </div>
-                                </MasterSection>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    <CommandNexusCard
+                                        title="System Telemetry"
+                                        subtitle="Live activity hub and events"
+                                        icon={Terminal}
+                                        statusColor="blue"
+                                        className="h-[430px]"
+                                    >
+                                        <div className="h-[320px] mt-2">
+                                            <SystemPulse />
+                                        </div>
+                                    </CommandNexusCard>
 
-                                <MasterSection title="Diagnostic Overrides" description="Low-level administrative operations and cache management." icon={<Activity size={24} className="text-blue-400" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <CommandButton label="Verify DB Integrity" icon={Database} onClick={() => alert('TRANSMISSION SUCCESS: Database Signal 100% | Latency 12ms')} />
-                                        <CommandButton label="Flush CDN Edge" icon={RefreshCw} onClick={() => alert('CACHE PURGED: Edge nodes wiped successfully.')} />
-                                        <CommandButton label="Sync System Time" icon={Activity} onClick={() => alert('TIME SYNC: NTP server 162.159.200.1 verified.')} />
+                                    <div className="space-y-8">
+                                        <CommandNexusCard
+                                            title="Availability Controls"
+                                            subtitle="Global accessibility states"
+                                            icon={Zap}
+                                            statusColor="orange"
+                                        >
+                                            <div className="space-y-4 pt-4">
+                                                <ProtocolToggle
+                                                    title="Maintenance Mode"
+                                                    description="Lock storefront for updates"
+                                                    active={siteSettings.maintenanceMode}
+                                                    onToggle={() => setSiteSettings({ ...siteSettings, maintenanceMode: !siteSettings.maintenanceMode })}
+                                                    color="red"
+                                                />
+                                                <ProtocolToggle
+                                                    title="Holiday Protocol"
+                                                    description="Pause new rental discoverability"
+                                                    active={siteSettings.holidayMode}
+                                                    onToggle={() => setSiteSettings({ ...siteSettings, holidayMode: !siteSettings.holidayMode })}
+                                                    color="orange"
+                                                />
+                                            </div>
+                                        </CommandNexusCard>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <button onClick={() => alert('Wipe cache?')} className="p-4 bg-white/5 border border-white/5 rounded-3xl hover:bg-white/10 transition-all text-left flex items-center gap-3 group">
+                                                <RefreshCw size={16} className="text-blue-400 group-hover:rotate-180 transition-transform duration-500" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 group-hover:text-white">Flush Cache</span>
+                                            </button>
+                                            <button onClick={() => alert('Broadcast Alert?')} className="p-4 bg-white/5 border border-white/5 rounded-3xl hover:bg-white/10 transition-all text-left flex items-center gap-3 group">
+                                                <Megaphone size={16} className="text-purple-400 group-hover:scale-110 transition-transform" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 group-hover:text-white">Broadcast</span>
+                                            </button>
+                                        </div>
                                     </div>
-                                </MasterSection>
+                                </div>
                             </motion.div>
                         )}
 
                         {/* TRANSMISSION (TITLES, DESCRIPTION, ANNOUNCEMENTS) */}
                         {activeTab === 'transmission' && (
                             <motion.div key="transmission" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                                <MasterSection title="Brand Transmission" description="Global identifiers transmitted to client browsers." icon={<Radio size={24} className="text-[#8B5CF6]" />}>
-                                    <div className="space-y-6">
+                                <CommandNexusCard title="Brand Transmission" subtitle="Global identifiers transmitted to client browsers" icon={Radio} statusColor="purple">
+                                    <div className="space-y-8 mt-6">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                             <HUDInput
                                                 label="Platform Hostname"
@@ -375,20 +419,20 @@ export default function MasterControlPage() {
                                                 value={siteSettings.announcement}
                                                 onChange={(e) => setSiteSettings({ ...siteSettings, announcement: e.target.value })}
                                                 rows={4}
-                                                className="w-full bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 text-white outline-none focus:border-[#8B5CF6] transition-all resize-none font-mono text-sm leading-relaxed"
+                                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white outline-none focus:border-[#8B5CF6] transition-all resize-none font-mono text-sm leading-relaxed"
                                                 placeholder="Message to display at the top of every page..."
                                             />
                                         </div>
                                     </div>
-                                </MasterSection>
+                                </CommandNexusCard>
                             </motion.div>
                         )}
 
                         {/* OPTIMIZATION (SEO) */}
                         {activeTab === 'optimization' && (
                             <motion.div key="optimization" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                                <MasterSection title="SEO Protocols" description="Manage metadata and search engine visibility descriptors." icon={<Shield size={24} className="text-emerald-400" />}>
-                                    <div className="space-y-8">
+                                <CommandNexusCard title="SEO Protocols" subtitle="Manage metadata and search engine visibility descriptors" icon={Globe} statusColor="emerald">
+                                    <div className="space-y-8 mt-6">
                                         <div className="flex flex-wrap gap-2 p-1 bg-white/5 rounded-xl w-fit">
                                             {Object.keys(siteSettings.seo || {}).map(pageKey => (
                                                 <button
@@ -401,8 +445,8 @@ export default function MasterControlPage() {
                                             ))}
                                         </div>
 
-                                        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 space-y-6 relative overflow-hidden group">
-                                            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none group-hover:opacity-10 transition-opacity">
+                                        <div className="bg-black/20 border border-white/5 rounded-3xl p-8 space-y-6 relative overflow-hidden group/seo backdrop-blur-md">
+                                            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none group-hover/seo:opacity-10 transition-opacity">
                                                 <Globe size={120} />
                                             </div>
 
@@ -453,32 +497,55 @@ export default function MasterControlPage() {
                                             </div>
                                         </div>
                                     </div>
-                                </MasterSection>
+                                </CommandNexusCard>
                             </motion.div>
                         )}
 
                         {/* COMMERCE HUB */}
                         {activeTab === 'commerce' && (
                             <motion.div key="commerce" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                                <MasterSection title="Logistics Config" description="Manage physical transmission and threshold algorithms." icon={<Truck size={24} className="text-[#3B82F6]" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <HUDInput
-                                            label="Base Transmission Fee (₹)"
-                                            value={businessSettings.logistics.deliveryFee.toString()}
-                                            onChange={(val) => setBusinessSettings({ ...businessSettings, logistics: { ...businessSettings.logistics, deliveryFee: Number(val) } })}
-                                            type="number"
-                                        />
-                                        <HUDInput
-                                            label="Free Logistics Threshold (₹)"
-                                            value={businessSettings.logistics.freeDeliveryThreshold.toString()}
-                                            onChange={(val) => setBusinessSettings({ ...businessSettings, logistics: { ...businessSettings.logistics, freeDeliveryThreshold: Number(val) } })}
-                                            type="number"
-                                        />
-                                    </div>
-                                </MasterSection>
+                                <CommandNexusCard title="Commerce Logistics" subtitle="Fiscal parameters and operational logistics protocols" icon={ShoppingBag} statusColor="emerald">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mt-6">
+                                        <div className="space-y-8">
+                                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 border-l-2 border-emerald-500 pl-4 py-1">Financial Coefficients</h4>
+                                            <div className="grid grid-cols-1 gap-6">
+                                                <HUDInput
+                                                    label="Security Deposit Sync"
+                                                    value={siteSettings.securityDeposit.toString()}
+                                                    onChange={(val) => setSiteSettings({ ...siteSettings, securityDeposit: Number(val) })}
+                                                    type="number"
+                                                />
+                                                <HUDInput
+                                                    label="Global Logistics Tax (%)"
+                                                    value={siteSettings.taxRate.toString()}
+                                                    onChange={(val) => setSiteSettings({ ...siteSettings, taxRate: Number(val) })}
+                                                    type="number"
+                                                />
+                                            </div>
+                                        </div>
 
-                                <MasterSection title="Financial Protocols" description="Taxes, platform fees, and violation penalties." icon={<DollarSign size={24} className="text-emerald-400" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="space-y-8">
+                                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 border-l-2 border-blue-400 pl-4 py-1">Rental Logic Protocols</h4>
+                                            <div className="grid grid-cols-1 gap-6">
+                                                <HUDInput
+                                                    label="Minimum Transmission Units (Days)"
+                                                    value={siteSettings.minRentalDays.toString()}
+                                                    onChange={(val) => setSiteSettings({ ...siteSettings, minRentalDays: Number(val) })}
+                                                    type="number"
+                                                />
+                                                <HUDInput
+                                                    label="Gratis Delivery Threshold"
+                                                    value={siteSettings.freeDeliveryThreshold.toString()}
+                                                    onChange={(val) => setSiteSettings({ ...siteSettings, freeDeliveryThreshold: Number(val) })}
+                                                    type="number"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CommandNexusCard>
+
+                                <CommandNexusCard title="Financial Protocols" subtitle="Global taxes, platform fees, and violation penalties" icon={DollarSign} statusColor="emerald">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
                                         <HUDInput
                                             label="Global Tax Rate (%)"
                                             value={businessSettings.finance.taxRate.toString()}
@@ -499,45 +566,39 @@ export default function MasterControlPage() {
                                             className="!text-red-500"
                                         />
                                     </div>
-                                </MasterSection>
+                                </CommandNexusCard>
                             </motion.div>
                         )}
 
                         {/* TRADE-IN MATRIX */}
                         {activeTab === 'marketplace' && (
                             <motion.div key="marketplace" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                                <MasterSection title="Buy-Back Algorithms" description="Manage trade-in multipliers and credit bonuses." icon={<Tag size={24} className="text-blue-400" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 space-y-8">
-                                            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Payout Multipliers</h4>
-
-                                            <ProtocolToggle
-                                                title="Liquidity Factor"
-                                                description={`Standard cash payout is strictly ${Math.round(marketplaceSettings.tradeInRate * 100)}% of street value.`}
-                                                active={true}
-                                                onToggle={() => { }}
-                                                color="blue"
-                                                showToggle={false}
-                                            />
-
+                                <CommandNexusCard title="Trade-In Matrix" subtitle="Define value coefficients for peer-to-peer asset acquisition" icon={RefreshCw} statusColor="orange">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mt-6">
+                                        <div className="space-y-8">
                                             <HUDInput
-                                                label="Base Trade-In Rate (0.0 - 1.0)"
-                                                value={marketplaceSettings.tradeInRate.toString()}
-                                                onChange={(val) => setMarketplaceSettings({ ...marketplaceSettings, tradeInRate: Number(val) })}
+                                                label="Acquisition Fee (%)"
+                                                value={marketplaceSettings.tradeInFee.toString()}
+                                                onChange={(val) => setMarketplaceSettings({ ...marketplaceSettings, tradeInFee: Number(val) })}
                                                 type="number"
                                             />
-
-                                            <HUDInput
-                                                label="Store Credit Incentive (0.0 - 1.0)"
-                                                value={marketplaceSettings.creditBonus.toString()}
-                                                onChange={(val) => setMarketplaceSettings({ ...marketplaceSettings, creditBonus: Number(val) })}
-                                                type="number"
-                                            />
+                                            <div className="flex items-center justify-between p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl">
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-[10px] font-black uppercase text-orange-500">Enable Trade-In Uplink</span>
+                                                    <span className="text-[8px] text-gray-500 uppercase font-bold tracking-widest">Public discovery of sell module</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => setMarketplaceSettings({ ...marketplaceSettings, enableTradeIn: !marketplaceSettings.enableTradeIn })}
+                                                    className={`w-12 h-6 rounded-full p-1 transition-colors ${marketplaceSettings.enableTradeIn ? 'bg-orange-500' : 'bg-white/10'}`}
+                                                >
+                                                    <div className={`w-4 h-4 rounded-full bg-white transition-transform ${marketplaceSettings.enableTradeIn ? 'translate-x-6' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 space-y-8">
-                                            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Processing Timelines (Hours)</h4>
-                                            <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-6">
+                                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 border-l-2 border-blue-400 pl-4 py-1">Assessed Value Tiers</h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 {Object.entries(marketplaceSettings.payoutTiers).map(([key, value]) => (
                                                     <HUDInput
                                                         key={key}
@@ -551,37 +612,37 @@ export default function MasterControlPage() {
                                                     />
                                                 ))}
                                             </div>
-                                            <div className="p-4 bg-blue-500/5 border border-blue-500/10 rounded-xl">
+                                            <div className="p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
                                                 <p className="text-[10px] text-blue-400 font-mono italic">NOTICE: Payout estimations will sync globally across user mission profiles.</p>
                                             </div>
                                         </div>
                                     </div>
-                                </MasterSection>
+                                </CommandNexusCard>
                             </motion.div>
                         )}
 
                         {/* SYSTEM NEXUS */}
                         {activeTab === 'nexus' && (
                             <motion.div key="nexus" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                                <MasterSection title="Nexus Integration Matrix" description="Monitor real-time status of critical system pipelines." icon={<Activity size={24} className="text-blue-400" />}>
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <CommandNexusCard title="Integration Matrix" subtitle="Real-time status of critical system pipelines" icon={Activity} statusColor="blue">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                                         <NexusCard label="Supabase DB" status={systemMetrics?.integrations?.supabase} icon={Database} color="emerald" />
                                         <NexusCard label="Razorpay API" status={systemMetrics?.integrations?.razorpay} icon={CreditCard} color="blue" />
                                         <NexusCard label="AI Engine" status={systemMetrics?.integrations?.ai_core} icon={Cpu} color="purple" />
                                         <NexusCard label="Edge Runtime" status="active" icon={Zap} color="orange" />
                                     </div>
-                                </MasterSection>
+                                </CommandNexusCard>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     <div className="lg:col-span-2">
                                         <div className="grid grid-cols-1 gap-8">
-                                            <MasterSection title="Live Feedback Loop" description="Real-time terminal transmission of administrative actions." icon={<Terminal size={24} className="text-[#8B5CF6]" />}>
-                                                <div className="h-[400px]">
+                                            <CommandNexusCard title="Feedback Loop" subtitle="Real-time terminal transmission" icon={Terminal} statusColor="purple">
+                                                <div className="h-[400px] mt-4">
                                                     <NexusTerminal />
                                                 </div>
-                                            </MasterSection>
-                                            <MasterSection title="Latency Telemetry" description="Real-time database and API response times." icon={<Activity size={24} className="text-[#3B82F6]" />}>
-                                                <div className="h-[200px] w-full mt-4 bg-white/5 rounded-3xl p-6 border border-white/5">
+                                            </CommandNexusCard>
+                                            <CommandNexusCard title="Latency Telemetry" subtitle="Real-time response times" icon={Activity} statusColor="blue">
+                                                <div className="h-[200px] w-full mt-4 bg-white/5 rounded-3xl p-6 border border-white/5 backdrop-blur-sm">
                                                     <ResponsiveContainer width="100%" height="100%">
                                                         <LineChart data={systemMetrics?.latencySeries}>
                                                             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff03" vertical={false} />
@@ -594,46 +655,91 @@ export default function MasterControlPage() {
                                                         </LineChart>
                                                     </ResponsiveContainer>
                                                 </div>
-                                            </MasterSection>
+                                            </CommandNexusCard>
                                         </div>
                                     </div>
                                     <div className="space-y-8">
-                                        <MasterSection title="Core Metrics" description="System load and latency." icon={<Zap size={24} className="text-emerald-400" />}>
-                                            <div className="space-y-6">
+                                        <CommandNexusCard title="Core Metrics" subtitle="System load and latency" icon={Zap} statusColor="emerald">
+                                            <div className="space-y-6 pt-4">
                                                 <MetricBar label="Global Latency" value={systemMetrics?.database?.latency || 0} max={100} unit="ms" />
                                                 <MetricBar label="Traffic Load" value={(systemMetrics?.traffic?.load || 0) * 100} max={100} unit="%" />
                                                 <MetricBar label="Pool Saturation" value={systemMetrics?.database?.pool || 0} max={100} unit="%" />
                                             </div>
-                                        </MasterSection>
+                                        </CommandNexusCard>
                                     </div>
                                 </div>
                             </motion.div>
                         )}
 
-                        {/* SECURITY */}
+                        {/* SECURITY PROTOCOLS */}
                         {activeTab === 'security' && (
-                            <motion.div key="security" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                                <div className="bg-[#0a0a0a] border-2 border-dashed border-white/5 rounded-[3rem] py-32 flex flex-col items-center justify-center text-center group">
-                                    <div className="p-6 bg-white/5 rounded-full border border-white/10 mb-8 group-hover:scale-110 group-hover:bg-red-500/10 group-hover:border-red-500/30 transition-all duration-500">
-                                        <Lock size={64} className="text-gray-600 group-hover:text-red-500 transition-colors" />
+                            <motion.div key="security" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8 pb-20">
+                                <CommandNexusCard title="Security Protocols" subtitle="Core administrative access and authentication overrides" icon={Lock} statusColor="red">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mt-6">
+                                        <div className="space-y-8">
+                                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 border-l-2 border-red-500 pl-4 py-1">Access Authorization</h4>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                <ProtocolToggle
+                                                    title="2FA Enforcement"
+                                                    description="Strictly require 2FA for all administrative nodes"
+                                                    active={true}
+                                                    onToggle={() => { }}
+                                                    color="red"
+                                                />
+                                                <ProtocolToggle
+                                                    title="IP Whitelisting"
+                                                    description="Restrict access to authorized sector coordinates"
+                                                    active={false}
+                                                    onToggle={() => { }}
+                                                    color="red"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-8">
+                                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 border-l-2 border-blue-400 pl-4 py-1">Threat Mitigation</h4>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl flex items-center justify-between group">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] font-black uppercase text-red-500">Atomic Force Logout</span>
+                                                        <span className="text-[8px] text-gray-500 uppercase font-bold tracking-widest">Terminate all active sessions</span>
+                                                    </div>
+                                                    <button onClick={() => alert('Atomic logout initiated.')} className="px-4 py-2 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors">Execute</button>
+                                                </div>
+                                                <div className="p-4 bg-white/5 border border-white/5 rounded-2xl flex items-center justify-center gap-2">
+                                                    <Shield size={14} className="text-gray-500" />
+                                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 italic">Security Level: Maximum</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Core Security Protocols</h3>
-                                    <p className="text-[10px] text-gray-500 max-w-sm mt-6 uppercase tracking-widest font-black leading-relaxed">
-                                        Access control lists and biometric overrides are currently managed via the <span className="text-white italic">Primary Server Terminal</span>. Direct master encryption keys reside in the secure vault.
-                                    </p>
-                                    <div className="mt-10 flex gap-4">
-                                        <button className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white transition-all">Audit Logs</button>
-                                        <button className="px-6 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-500/20 transition-all flex items-center gap-2">
-                                            <Terminal size={12} /> Root Override
-                                        </button>
-                                    </div>
+                                </CommandNexusCard>
+
+                                <div className="p-24 bg-[#0a0a0a] border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center justify-center text-center opacity-40 grayscale uppercase">
+                                    <Lock size={48} className="text-gray-700 mb-6" />
+                                    <h3 className="text-xl font-black text-white tracking-tighter italic">Encrypted Sector</h3>
+                                    <p className="text-[9px] text-gray-500 max-w-xs mt-4 tracking-[0.2em] font-black font-mono">End-to-end encryption verified // console-zone-v4</p>
                                 </div>
+                            </motion.div>
+                        )}
+
+                        {/* IDENTITY HUB */}
+                        {activeTab === 'identity' && (
+                            <motion.div key="identity" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                                <KYCCommandNexus />
+                            </motion.div>
+                        )}
+
+                        {/* GLOBAL OPERATIONS (MAP) */}
+                        {activeTab === 'global-ops' && (
+                            <motion.div key="global-ops" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                                <FleetCommandNexus />
                             </motion.div>
                         )}
                     </AnimatePresence>
                 </main>
             </div>
-        </div>
+        </div >
     );
 }
 
@@ -658,23 +764,7 @@ function NavTab({ id, icon: Icon, label, active, onClick }: { id: string, icon: 
     );
 }
 
-function MasterSection({ title, description, icon, children }: { title: string, description: string, icon: React.ReactNode, children: React.ReactNode }) {
-    return (
-        <section className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 lg:p-10 relative overflow-hidden group/sec">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none group-hover/sec:scale-110 transition-transform duration-1000">
-                {icon}
-            </div>
-            <div className="space-y-2 mb-8 border-b border-white/10 pb-6">
-                <div className="flex items-center gap-3">
-                    {icon}
-                    <h2 className="text-xl font-black uppercase tracking-tight italic">{title}</h2>
-                </div>
-                <p className="text-gray-500 text-xs font-mono uppercase tracking-widest">{description}</p>
-            </div>
-            {children}
-        </section>
-    );
-}
+
 
 function HUDIndicator({ label, value, active, color }: { label: string, value: string, active: boolean, color: 'blue' | 'emerald' | 'orange' | 'red' | 'purple' }) {
     const colors = {
@@ -751,14 +841,18 @@ function CommandButton({ label, icon: Icon, onClick }: { label: string, icon: Lu
 function NexusCard({ label, status, icon: Icon, color }: { label: string, status: string, icon: LucideIcon, color: string }) {
     const isOnline = status === 'operational' || status === 'active';
     return (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col gap-3 group hover:border-[#3B82F6]/30 transition-all">
+        <div className="bg-black/20 backdrop-blur-md border border-white/5 rounded-2xl p-5 flex flex-col gap-4 group hover:border-[#3B82F6]/30 hover:bg-white/5 transition-all duration-500">
             <div className="flex items-center justify-between">
-                <Icon size={16} className={`text-${color}-500 opacity-60`} />
-                <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 animate-pulse'}`} />
+                <div className={`p-2 bg-white/5 rounded-lg text-${color}-400 group-hover:scale-110 transition-transform`}>
+                    <Icon size={16} />
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} />
+                </div>
             </div>
-            <div className="flex flex-col">
-                <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{label}</span>
-                <span className={`text-[10px] font-mono uppercase italic ${isOnline ? 'text-white' : 'text-red-500'}`}>{status || 'Offline'}</span>
+            <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{label}</span>
+                <span className={`text-[11px] font-mono uppercase italic tracking-tighter ${isOnline ? 'text-white/90' : 'text-red-500'}`}>{status || 'Offline'}</span>
             </div>
         </div>
     );

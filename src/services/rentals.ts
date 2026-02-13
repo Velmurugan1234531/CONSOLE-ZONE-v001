@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/client";
 import { Rental } from "@/types";
 import { sendNotification } from "./notifications";
+import { Transmissions } from "@/utils/neural-messages";
 
 import { checkRentalEligibility } from "./maintenance";
 
@@ -25,11 +26,12 @@ export const createRental = async (rentalData: Partial<Rental>) => {
 
     // Automated Notification
     try {
+        const transmission = Transmissions.RENTAL.BOOKED("Gaming Console", data.id);
         await sendNotification({
             user_id: data.user_id,
             type: 'success',
-            title: 'Booking Confirmed!',
-            message: `Your rental for unit #${data.console_id} has been successfully registered. Mission starts now!`
+            title: transmission.title,
+            message: transmission.message
         });
     } catch (e) {
         console.warn("Failed to send automated notification:", e);
@@ -39,7 +41,18 @@ export const createRental = async (rentalData: Partial<Rental>) => {
 };
 
 export const getUserRentals = async (userId: string) => {
+    // Demo Mode Support
+    if (userId === 'demo-user-123') {
+        const { DEMO_RENTALS } = await import("@/constants/demo-stock");
+        return DEMO_RENTALS || [];
+    }
+
     const supabase = createClient();
+
+    // Safety check for non-prod environments
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_URL.startsWith('http')) {
+        return [];
+    }
 
     const { data, error } = await supabase
         .from('rentals')

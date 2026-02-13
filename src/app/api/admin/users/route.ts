@@ -34,7 +34,7 @@ export async function POST(req: Request) {
             // If NO trigger, we insert. Let's assume we might need to update the role.
 
             const { error: profileError } = await supabaseAdmin
-                .from('profiles')
+                .from('users')
                 .upsert({
                     id: userData.user.id,
                     full_name: fullName,

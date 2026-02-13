@@ -110,12 +110,12 @@ export const updateRepairStatus = async (id: string, status: RepairStatus, techn
                         ? `Great news! Your ${ticket.device_name} is ready for pickup.`
                         : `Your ${ticket.device_name} repair status has been updated to ${status}.`
                 });
-            } catch (e) {
-                console.warn("Failed to send repair notification:", e);
+            } catch (e: any) {
+                console.warn(`Failed to send repair notification: ${e?.message || e}`);
             }
         }
-    } catch (error) {
-        console.warn(`Repairs service: Error updating ${id}:`, error);
+    } catch (error: any) {
+        console.warn(`Repairs service: Error updating ${id}: ${error?.message || error}`);
     }
 };
 
@@ -140,11 +140,11 @@ export const createRepairTicket = async (ticket: Partial<RepairTicket>): Promise
                     title: 'Repair Ticket Opened',
                     message: `Your repair ticket for ${ticket.device_name} has been created. Status: ${ticket.status || 'pending'}.`
                 });
-            } catch (e) {
-                console.warn("Failed to send repair creation notification:", e);
+            } catch (e: any) {
+                console.warn(`Failed to send repair creation notification: ${e?.message || e}`);
             }
         }
-    } catch (error) {
-        console.error("Repairs service: Error creating ticket:", error);
+    } catch (error: any) {
+        console.error(`Repairs service: Error creating ticket: ${error?.message || error}`);
     }
 };

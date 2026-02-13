@@ -13,7 +13,33 @@ CREATE TABLE IF NOT EXISTS consoles (
     console_id SERIAL PRIMARY KEY,
     name VARCHAR(50), -- e.g., "PS5-Unit-Alpha"
     category VARCHAR(20), -- 'PS5', 'XBOX'
+    category VARCHAR(20), -- 'PS5', 'XBOX'
     status VARCHAR(20) DEFAULT 'ACTIVE' -- ACTIVE, MAINTENANCE
+);
+
+-- 2.1 PROFILES: Extended User Data (Linked to Auth)
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID REFERENCES auth.users(id) PRIMARY KEY,
+    full_name TEXT,
+    phone TEXT,
+    secondary_phone TEXT,
+    aadhar_number TEXT,
+    address TEXT,
+    
+    -- KYC Fields
+    kyc_status VARCHAR(20) DEFAULT 'NOT_SUBMITTED', -- NOT_SUBMITTED, PENDING, APPROVED, REJECTED
+    id_card_front_url TEXT,
+    id_card_back_url TEXT,
+    selfie_url TEXT,
+    kyc_submitted_at TIMESTAMP WITH TIME ZONE,
+    rejection_reason TEXT,
+    
+    -- Additional Contact & Location
+    secondary_address TEXT,
+    location_lat DOUBLE PRECISION,
+    location_lng DOUBLE PRECISION,
+    
+    updated_at TIMESTAMP WITH TIME ZONE
 );
 
 -- 3. PLANS: Hourly, Daily, Weekly definitions

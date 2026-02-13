@@ -68,6 +68,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         controllers: number;
         storage_gb: number;
         firmware_version: string;
+        quantity: number;
     }>({
         model: "",
         serialNumber: "",
@@ -82,7 +83,8 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         asset_records: "",
         controllers: 1,
         storage_gb: 825,
-        firmware_version: "1.0.0"
+        firmware_version: "1.0.0",
+        quantity: 1
     });
 
     const PRESETS = [
@@ -111,7 +113,8 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
             connectors: preset.connectors,
             controllers: preset.controllers,
             storage_gb: preset.storage,
-            firmware_version: preset.firmware
+            firmware_version: preset.firmware,
+            quantity: 1
         }));
     };
 
@@ -170,7 +173,8 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                 asset_records: "",
                 controllers: 1,
                 storage_gb: 825,
-                firmware_version: "1.0.0"
+                firmware_version: "1.0.0",
+                quantity: 1
             });
         }
     });
@@ -190,9 +194,12 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         createMutation.isPending ||
         updateMutation.isPending;
 
+    const [isBulkOnboarding, setIsBulkOnboarding] = useState(false);
+
     const generateNextSerial = () => {
         if (!devices || devices.length === 0) return 'SN-000001';
         const maxSerial = devices.reduce((max: number, device: Device) => {
+            if (!device.serialNumber) return max;
             const match = device.serialNumber.match(/SN-(\d+)/);
             if (match) {
                 const num = parseInt(match[1]);
@@ -430,8 +437,12 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
         e.preventDefault();
         setValidationErrors({});
 
+        // Exclude quantity from schema validation and payload
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { quantity, ...deviceData } = newDevice;
+
         const payload = {
-            ...newDevice,
+            ...deviceData,
             connectors: newDevice.connectors.split(',').map(s => s.trim()).filter(Boolean),
             asset_records: newDevice.asset_records.split(',').map(s => s.trim()).filter(Boolean)
         };
@@ -446,7 +457,64 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
             return;
         }
 
-        createMutation.mutate(payload);
+        if (newDevice.quantity > 1) {
+            setIsBulkOnboarding(true);
+            try {
+                const requests = [];
+                for (let i = 0; i < newDevice.quantity; i++) {
+                    let serial = newDevice.serialNumber;
+                    const match = serial.match(/(.*?)(\d+)$/);
+
+                    if (match) {
+                        const prefix = match[1];
+                        const numStr = match[2];
+                        const num = parseInt(numStr);
+                        // Increment for each subsequent device (0-indexed i, so i=0 is original)
+                        const nextNum = num + i;
+                        serial = `${prefix}${(nextNum).toString().padStart(numStr.length, '0')}`;
+                    } else {
+                        // If no number at end, append counter only for subsequent (or all? let's do all to be safe if strictly 3)
+                        // Actually if user says "PS5", quantity 2. -> PS5-1, PS5-2 is better.
+                        // If user says "PS5-1", quantity 2. -> PS5-1, PS5-2.
+                        if (newDevice.quantity > 1) {
+                            serial = `${newDevice.serialNumber}-${i + 1}`;
+                        }
+                    }
+
+                    // Use the original payload but update serial
+                    const itemPayload = { ...payload, serialNumber: serial };
+                    requests.push(createDevice(itemPayload));
+                }
+
+                await Promise.all(requests);
+                queryClient.invalidateQueries({ queryKey: ['adminDevices'] });
+                setIsAdding(false);
+                setNewDevice({
+                    model: "",
+                    serialNumber: "",
+                    category: categories[0]?.device_category || "",
+                    health: 100,
+                    notes: "",
+                    cost: 0,
+                    supplier: "",
+                    purchaseDate: "",
+                    warrantyExpiry: "",
+                    connectors: "",
+                    asset_records: "",
+                    controllers: 1,
+                    storage_gb: 825,
+                    firmware_version: "1.0.0",
+                    quantity: 1
+                });
+            } catch (error) {
+                console.error("Bulk onboard failed:", error);
+                alert("Failed to onboard some units.");
+            } finally {
+                setIsBulkOnboarding(false);
+            }
+        } else {
+            createMutation.mutate(payload);
+        }
     };
 
     const handleUpdateDevice = async (e: FormEvent) => {
@@ -469,7 +537,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
 
 
     useEffect(() => {
-        console.log("FleetManager mounted, handling search params...");
+
 
         // Handle URL search params
         const search = searchParams.get('search');
@@ -1143,7 +1211,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                                             />
                                                                         </div>
                                                                         <div className="space-y-2">
-                                                                            <label className="text-[9px] font-black text-gray-600 uppercase">Interface Cnt</label>
+                                                                            <label className="text-[9px] font-black text-gray-600 uppercase">Included Controllers</label>
                                                                             <input
                                                                                 type="number"
                                                                                 value={editingDevice.controllers || 0}
@@ -1914,6 +1982,17 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                     ))}
                                                 </datalist>
                                             </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[9px] font-black text-gray-600 uppercase">Onboard Quantity</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="50"
+                                                    value={newDevice.quantity}
+                                                    onChange={e => setNewDevice({ ...newDevice, quantity: Number(e.target.value) })}
+                                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-[#8B5CF6] outline-none font-mono text-xs"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1935,7 +2014,7 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[9px] font-black text-gray-600 uppercase">Interface Cnt</label>
+                                                    <label className="text-[9px] font-black text-gray-600 uppercase">Included Controllers</label>
                                                     <input
                                                         type="number"
                                                         value={newDevice.controllers}
@@ -2064,8 +2143,8 @@ export function FleetManager({ hideHeader = false }: { hideHeader?: boolean }) {
                                         disabled={isSubmitting}
                                         className="px-12 py-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all shadow-[0_4px_30px_rgba(139,92,246,0.25)] flex items-center gap-2"
                                     >
-                                        {isSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                                        {isSubmitting ? "COMMITTING..." : "FINALIZE ONBOARDING"}
+                                        {isSubmitting || isBulkOnboarding ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                                        {isSubmitting || isBulkOnboarding ? "COMMITTING..." : "FINALIZE ONBOARDING"}
                                     </button>
                                 </div>
                             </form>

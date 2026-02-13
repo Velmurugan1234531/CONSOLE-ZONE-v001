@@ -9,7 +9,7 @@ export const getSales = async (): Promise<SaleRecord[]> => {
         .order('created_at', { ascending: false });
 
     if (error) {
-        console.error("Error fetching sales:", error);
+        console.error(`Error fetching sales: ${error.message || error}`);
         return [];
     }
 
@@ -35,7 +35,7 @@ export const getDailyRevenue = async (): Promise<number> => {
         .gte('created_at', today.toISOString());
 
     if (error) {
-        console.error("Error fetching daily revenue:", error);
+        console.error(`Error fetching daily revenue: ${error.message || error}`);
         return 0;
     }
 
@@ -54,7 +54,7 @@ export const getMonthlyRevenue = async (): Promise<number> => {
         .gte('created_at', firstDay.toISOString());
 
     if (error) {
-        console.error("Error fetching monthly revenue:", error);
+        console.error(`Error fetching monthly revenue: ${error.message || error}`);
         return 0;
     }
 
@@ -76,7 +76,7 @@ export const recordSale = async (sale: Omit<SaleRecord, 'id' | 'date' | 'timesta
         .single();
 
     if (error) {
-        console.error("Error recording sale:", error);
+        console.error(`Error recording sale: ${error.message || error}`);
         return false;
     }
 
@@ -90,8 +90,8 @@ export const recordSale = async (sale: Omit<SaleRecord, 'id' | 'date' | 'timesta
                 title: 'Purchase Successful!',
                 message: `Thank you for your purchase of ₹${sale.total_amount}. Your transaction id is ${record.id}.`
             });
-        } catch (e) {
-            console.warn("Failed to send sale notification:", e);
+        } catch (e: any) {
+            console.warn(`Failed to send sale notification: ${e?.message || e}`);
         }
     }
 
