@@ -26,6 +26,11 @@ function LoadingFallback() {
 import QueryProvider from "@/providers/QueryProvider";
 import "@/lib/firebase";
 
+if (typeof window !== "undefined") {
+  console.log("%c CONSOLE-ZONE v007 Loaded ", "background: #8B5CF6; color: white; font-weight: bold; padding: 4px; border-radius: 4px;");
+  console.log("Build: " + new Date().toISOString());
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
